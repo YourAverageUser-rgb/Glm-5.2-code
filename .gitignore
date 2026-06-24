@@ -1,0 +1,6 @@
+node_modules/
+.ucode/sessions/
+.ucode/config.json
+*.log
+.env
+.DS_Store

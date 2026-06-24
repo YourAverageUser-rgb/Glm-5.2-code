@@ -1,0 +1,16 @@
+{
+  "provider": "glm",
+  "model": "glm-5.2",
+  "permissionMode": "default",
+  "denyTools": [],
+  "allowTools": null,
+
+  "_comment_custom_provider": "To point at any other OpenAI-compatible or Anthropic-compatible endpoint, replace the block above with something like:",
+  "_example_custom_provider": {
+    "provider": "my-provider",
+    "kind": "openai-compatible",
+    "model": "some-model-name",
+    "baseURL": "https://my.endpoint.example/v1",
+    "apiKeyEnv": "MY_PROVIDER_API_KEY"
+  }
+}

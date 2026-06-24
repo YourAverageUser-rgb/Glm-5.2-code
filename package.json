@@ -1,0 +1,32 @@
+{
+  "name": "universal-code",
+  "version": "0.1.0",
+  "description": "A model-agnostic, terminal-based coding agent that operates like Claude Code but works with any LLM (defaults to GLM-5.2, swap in any OpenAI-compatible or Anthropic-compatible model and API key).",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "ucode": "./bin/ucode.js"
+  },
+  "engines": {
+    "node": ">=18.17.0"
+  },
+  "files": [
+    "bin",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "start": "node bin/ucode.js",
+    "test": "node --test test/*.test.js"
+  },
+  "keywords": [
+    "ai",
+    "agent",
+    "cli",
+    "coding-assistant",
+    "glm",
+    "llm",
+    "terminal"
+  ]
+}

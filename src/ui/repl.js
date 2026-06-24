@@ -1,0 +1,205 @@
+import readline from "node:readline/promises";
+import { stdin, stdout } from "node:process";
+import { runAgentLoop } from "../agent/loop.js";
+import { Session, latestSession, listSessions } from "../agent/session.js";
+import { renderEvent, renderBanner, renderTodos, color } from "./render.js";
+import { onTodosChange } from "../tools/todoStore.js";
+import { buildRuntime } from "../agent/runtime.js";
+import { createProvider } from "../providers/index.js";
+import { resolvePreset, listPresets } from "../config/presets.js";
+import { MODES } from "../agent/permissions.js";
+
+const HELP = `Commands:
+  /help                 show this help
+  /mode <mode>          set permission mode: ${MODES.join(", ")}
+  /auto                 shortcut for mode bypassPermissions ("auto mode")
+  /plan                 shortcut for mode plan (read-only planning)
+  /model [name]         show or change the model name
+  /provider [name]      show or switch provider preset (${listPresets().map((p) => p.name).join(", ")})
+  /memory               show loaded project/global memory
+  /remember <text>      append a fact to project memory
+  /sessions             list saved sessions in this project
+  /resume <id>          resume a saved session
+  /clear                start a fresh session
+  /exit, /quit          leave
+`;
+
+export async function startRepl({ flags = {} } = {}) {
+  const rl = readline.createInterface({ input: stdin, output: stdout });
+
+  const confirm = async (tool, args) => {
+    const preview = JSON.stringify(args ?? {}).slice(0, 150);
+    const ans = await rl.question(color(`Allow ${tool.name}(${preview})? [y/N] `, "yellow"));
+    return /^y(es)?$/i.test(ans.trim());
+  };
+
+  const runtime = buildRuntime({ flags, confirm });
+  if (runtime.problems.length) {
+    for (const p of runtime.problems) console.error(color(`✗ ${p}`, "red"));
+    rl.close();
+    process.exitCode = 1;
+    return;
+  }
+
+  const { config, tools, memory, permissionGate, cwd } = runtime;
+  let provider = runtime.provider;
+  let providerLabel = runtime.providerLabel;
+
+  let session;
+  if (flags.resume) session = new Session(config, flags.resume);
+  else if (flags.continueSession && latestSession(config)) session = new Session(config, latestSession(config).id);
+  else session = new Session(config);
+
+  let { messages } = session.load();
+
+  renderBanner({ provider: config.provider, model: config.model, mode: config.permissionMode, cwd });
+  if (messages.length) console.log(color(`Resumed session ${session.id} (${messages.length} messages).`, "gray"));
+
+  onTodosChange((todos) => renderTodos(todos));
+
+  const ui = {
+    log: renderEvent,
+    askUser: async (question, options) => {
+      console.log("\n" + color(question, "bold"));
+      options.forEach((o, i) => console.log(`  ${i + 1}. ${o}`));
+      const ans = await rl.question("> ");
+      const idx = parseInt(ans, 10) - 1;
+      return options[idx] ?? ans;
+    },
+  };
+
+  while (true) {
+    const input = await rl.question(color("\n> ", "bold"));
+    const trimmed = input.trim();
+    if (!trimmed) continue;
+
+    if (trimmed.startsWith("/")) {
+      const outcome = await handleSlashCommand(trimmed, { config, permissionGate, memory, session, rl });
+      if (outcome === "exit") break;
+      if (outcome === "clear") {
+        session = new Session(config);
+        messages = [];
+      }
+      if (outcome?.newProvider) {
+        provider = outcome.newProvider;
+        providerLabel = outcome.newProviderLabel;
+      }
+      continue;
+    }
+
+    messages.push({ role: "user", content: trimmed });
+    const result = await runAgentLoop({
+      config,
+      provider,
+      tools,
+      initialMessages: messages,
+      cwd,
+      permissionGate,
+      ui,
+      memory,
+      providerLabel,
+      onMessage: (m) => session.save({ messages: m, usage: {} }),
+    });
+    messages = result.messages;
+    session.save({ messages, usage: result.usage });
+  }
+
+  rl.close();
+}
+
+async function handleSlashCommand(line, { config, permissionGate, memory, session, rl }) {
+  const [cmd, ...rest] = line.slice(1).split(/\s+/);
+  const arg = rest.join(" ");
+
+  switch (cmd) {
+    case "help":
+      console.log(HELP);
+      return;
+    case "exit":
+    case "quit":
+      return "exit";
+    case "clear":
+      console.log(color("Started a new session.", "gray"));
+      return "clear";
+    case "mode":
+      if (!arg || !MODES.includes(arg)) {
+        console.log(`Usage: /mode <${MODES.join("|")}>`);
+        return;
+      }
+      config.permissionMode = arg;
+      permissionGate.setMode(arg);
+      console.log(color(`Permission mode -> ${arg}`, "green"));
+      return;
+    case "auto":
+      config.permissionMode = "bypassPermissions";
+      permissionGate.setMode("bypassPermissions");
+      console.log(color("Auto mode on: edits and commands run without confirmation.", "green"));
+      return;
+    case "plan":
+      config.permissionMode = "plan";
+      permissionGate.setMode("plan");
+      console.log(color("Plan mode on: read-only until you switch modes.", "green"));
+      return;
+    case "model":
+      if (!arg) {
+        console.log(`Current model: ${config.model}`);
+        return;
+      }
+      config.model = arg;
+      console.log(color(`Model -> ${arg}`, "green"));
+      return;
+    case "provider": {
+      if (!arg) {
+        console.log(`Current provider: ${config.provider} (${config.kind}, ${config.baseURL})`);
+        console.log(`Available presets: ${listPresets().map((p) => p.name).join(", ")}`);
+        return;
+      }
+      const preset = resolvePreset(arg);
+      if (!preset) {
+        console.log(color(`Unknown preset "${arg}". Edit .ucode/settings.json for a fully custom provider.`, "red"));
+        return;
+      }
+      config.provider = arg;
+      config.kind = preset.kind;
+      config.model = preset.model;
+      config.baseURL = preset.baseURL;
+      config.apiKeyEnv = preset.apiKeyEnv;
+      config.apiKey = preset.apiKeyEnv ? process.env[preset.apiKeyEnv] : null;
+      config.apiKeyOptional = Boolean(preset.apiKeyOptional);
+      if (!config.apiKey && !config.apiKeyOptional) {
+        console.log(color(`Switched to ${arg}, but no API key found in $${preset.apiKeyEnv}. Set it before sending a message.`, "yellow"));
+      } else {
+        console.log(color(`Provider -> ${arg} (${preset.model})`, "green"));
+      }
+      return { newProvider: createProvider(config), newProviderLabel: preset.label };
+    }
+    case "memory":
+      console.log(memory.project ? `Project (${memory.project.path}):\n${memory.project.content}` : "No project memory file.");
+      console.log(memory.global ? `\nGlobal (${memory.global.path}):\n${memory.global.content}` : "No global memory file.");
+      return;
+    case "remember": {
+      if (!arg) {
+        console.log("Usage: /remember <text>");
+        return;
+      }
+      const { rememberTool } = await import("../tools/memoryWrite.js");
+      const res = await rememberTool.execute({ content: arg }, { cwd: config.projectRoot, config });
+      console.log(color(res.output, "green"));
+      return;
+    }
+    case "sessions":
+      for (const s of listSessions(config)) console.log(`${s.id}\t${new Date(s.mtime).toLocaleString()}`);
+      return;
+    case "resume": {
+      if (!arg) {
+        console.log("Usage: /resume <session-id>");
+        return;
+      }
+      console.log(color(`Use: ucode --resume ${arg} (resuming mid-REPL isn't supported yet; restart with this flag).`, "yellow"));
+      return;
+    }
+    default:
+      console.log(color(`Unknown command: /${cmd}. Try /help.`, "red"));
+      return;
+  }
+}

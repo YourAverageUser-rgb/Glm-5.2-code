@@ -1,0 +1,42 @@
+import { runAgentLoop } from "../agent/loop.js";
+import { Session } from "../agent/session.js";
+import { renderEvent, color } from "./render.js";
+import { buildRuntime } from "../agent/runtime.js";
+
+export async function runOneShot({ prompt, flags = {} }) {
+  const confirm = async (tool) => {
+    process.stderr.write(color(`(non-interactive: denying "${tool.name}"; pass --auto to allow mutating actions without prompts)\n`, "yellow"));
+    return false;
+  };
+
+  const runtime = buildRuntime({ flags, confirm });
+  if (runtime.problems.length) {
+    for (const p of runtime.problems) console.error(color(`✗ ${p}`, "red"));
+    process.exitCode = 1;
+    return;
+  }
+
+  const { config, provider, tools, memory, permissionGate, providerLabel, cwd } = runtime;
+  const session = new Session(config);
+
+  const ui = {
+    log: flags.quiet ? () => {} : renderEvent,
+    askUser: async (question, options) => options[0] ?? "",
+  };
+
+  const result = await runAgentLoop({
+    config,
+    provider,
+    tools,
+    initialMessages: [{ role: "user", content: prompt }],
+    cwd,
+    permissionGate,
+    ui,
+    memory,
+    providerLabel,
+    onMessage: (m) => session.save({ messages: m, usage: {} }),
+  });
+
+  session.save({ messages: result.messages, usage: result.usage });
+  console.log(flags.quiet ? result.finalText : "\n" + color("── result ──", "gray") + "\n" + result.finalText);
+}
