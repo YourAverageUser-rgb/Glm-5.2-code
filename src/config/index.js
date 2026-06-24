@@ -50,6 +50,7 @@ function fromEnv() {
   if (env.UCODE_API_KEY) cfg.apiKey = env.UCODE_API_KEY;
   if (env.UCODE_API_KEY_ENV) cfg.apiKeyEnv = env.UCODE_API_KEY_ENV;
   if (env.UCODE_PERMISSION_MODE) cfg.permissionMode = env.UCODE_PERMISSION_MODE;
+  if (env.UCODE_SKIP_CALIBRATION) cfg.skipCalibration = /^(1|true|yes)$/i.test(env.UCODE_SKIP_CALIBRATION);
   return cfg;
 }
 
@@ -61,6 +62,7 @@ function fromCliFlags(flags = {}) {
   if (flags.apiKey) cfg.apiKey = flags.apiKey;
   if (flags.apiKeyEnv) cfg.apiKeyEnv = flags.apiKeyEnv;
   if (flags.permissionMode) cfg.permissionMode = flags.permissionMode;
+  if (flags.noCalibrate) cfg.skipCalibration = true;
   return cfg;
 }
 

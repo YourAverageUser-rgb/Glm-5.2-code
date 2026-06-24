@@ -39,6 +39,12 @@ models via Ollama/LM Studio, or any other OpenAI-compatible or Anthropic-compati
 ## Install
 
 ```bash
+./install.sh   # checks your Node version, npm install, npm link (falls back to ~/.local/bin)
+```
+
+Or do it by hand:
+
+```bash
 npm install
 npm link   # makes the `ucode` command available globally, or just run `node bin/ucode.js`
 ```
@@ -115,6 +121,28 @@ The agent automatically loads (and the system prompt includes) the first of `UCO
 `AGENTS.md`, or `CLAUDE.md` found walking up from the project root, plus `~/.ucode/MEMORY.md`
 globally. Append to either with `/remember <text>` (REPL) or the `remember` tool (project by
 default; pass `scope: "global"` for the global file).
+
+`AGENTS.md` is recognized for compatibility with the emerging cross-tool convention used by other
+coding agents (Codex CLI, Cursor, etc.) — drop one in a project and any of those tools, plus
+`ucode`, pick it up as project briefing/memory. This repo's own `AGENTS.md` is a working example.
+
+## Model calibration
+
+The first time you point `ucode` at a given provider+model+baseURL, it runs one throwaway
+tool-call probe before your real request — a synthetic "call this tool with this exact value"
+check — to verify the model actually emits well-formed tool calls. The result is cached in
+`~/.ucode/calibration.json` (keyed by provider+model+baseURL, re-checked monthly) so it doesn't
+re-run on every invocation. A failed check doesn't block you — it's surfaced as a one-line
+warning, since some models may still work despite a noisy probe response:
+
+```bash
+ucode --no-calibrate "..."   # skip the check entirely
+ucode --recalibrate "..."    # ignore the cache and re-check now
+```
+
+Also configurable via `skipCalibration: true` in `.ucode/settings.json`/`~/.ucode/config.json`,
+or `UCODE_SKIP_CALIBRATION=1`. Switching providers mid-REPL with `/provider` re-runs the check for
+the newly selected model.
 
 ## Slash commands (interactive REPL)
 
@@ -238,8 +266,9 @@ src/agent/
   permissions.js       permission modes + allow/deny logic
   session.js           session persistence + context compaction
   systemPrompt.js       system prompt templating
+  calibrate.js          first-run model tool-calling self-test + cache
   subagentTypes.js      builtin + custom (.ucode/agents/*.md) subagent type resolution
-  runtime.js            wires config + provider + tools + memory + permissions together
+  runtime.js            wires config + provider + tools + memory + permissions + calibration
 src/tools/             individual tool implementations (read/write/edit/glob/grep/bash/...)
 src/skills/            skill loading (.ucode/skills/*.md) + templating
 src/hooks/             PreToolUse/PostToolUse/SessionStart hook execution

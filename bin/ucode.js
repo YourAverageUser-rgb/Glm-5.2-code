@@ -34,6 +34,8 @@ Flags:
   -q, --quiet            suppress tool-call/result chatter
   --max-runs <n>         ucode loop: stop after n runs (default: unlimited)
   --max-attempts <n>     ucode fix: give up after n attempts (default: 5)
+  --no-calibrate         skip the first-run model tool-calling check
+  --recalibrate          ignore the cached calibration result and re-check
   -h, --help             show this help
 
 Configuration (highest precedence first): CLI flags > env vars (UCODE_*) >
@@ -65,6 +67,8 @@ function parseArgs(argv) {
       case "-q": case "--quiet": flags.quiet = true; break;
       case "--max-runs": flags.maxRuns = Number(argv[++i]); break;
       case "--max-attempts": flags.maxAttempts = Number(argv[++i]); break;
+      case "--no-calibrate": flags.noCalibrate = true; break;
+      case "--recalibrate": flags.recalibrate = true; break;
       case "-h": case "--help": flags.help = true; break;
       default: positional.push(a);
     }
@@ -151,11 +155,14 @@ async function runLoopCommand({ interval, prompt, flags }) {
     return;
   }
 
-  const runtime = buildRuntime({ flags, confirm: nonInteractiveConfirm });
+  const runtime = await buildRuntime({ flags, confirm: nonInteractiveConfirm });
   if (runtime.problems.length) {
     for (const p of runtime.problems) console.error(color(`✗ ${p}`, "red"));
     process.exitCode = 1;
     return;
+  }
+  if (runtime.calibration && !runtime.calibration.ok) {
+    console.error(color(`⚠ Calibration: ${runtime.calibration.reason}`, "yellow"));
   }
   if (!flags.auto) {
     console.error(color("Note: pass --auto for the loop to apply edits/commands without prompting (otherwise they're denied each run).", "yellow"));
@@ -175,11 +182,14 @@ async function runLoopCommand({ interval, prompt, flags }) {
 }
 
 async function runFixCommand({ command, flags }) {
-  const runtime = buildRuntime({ flags, confirm: nonInteractiveConfirm });
+  const runtime = await buildRuntime({ flags, confirm: nonInteractiveConfirm });
   if (runtime.problems.length) {
     for (const p of runtime.problems) console.error(color(`✗ ${p}`, "red"));
     process.exitCode = 1;
     return;
+  }
+  if (runtime.calibration && !runtime.calibration.ok) {
+    console.error(color(`⚠ Calibration: ${runtime.calibration.reason}`, "yellow"));
   }
   if (!flags.auto) {
     console.error(color("Note: pass --auto for fixes to actually be applied non-interactively (otherwise edits are denied each attempt).", "yellow"));

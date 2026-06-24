@@ -10,6 +10,7 @@ import { resolvePreset, listPresets } from "../config/presets.js";
 import { MODES } from "../agent/permissions.js";
 import { listBackground } from "../tools/processManager.js";
 import { startLoopRunner, parseInterval } from "../automation/loop.js";
+import { ensureCalibrated } from "../agent/calibrate.js";
 
 const HELP = `Commands:
   /help                 show this help
@@ -39,7 +40,7 @@ export async function startRepl({ flags = {} } = {}) {
     return /^y(es)?$/i.test(ans.trim());
   };
 
-  const runtime = buildRuntime({ flags, confirm });
+  const runtime = await buildRuntime({ flags, confirm });
   if (runtime.problems.length) {
     for (const p of runtime.problems) console.error(color(`✗ ${p}`, "red"));
     rl.close();
@@ -59,6 +60,9 @@ export async function startRepl({ flags = {} } = {}) {
   let { messages } = session.load();
 
   renderBanner({ provider: config.provider, model: config.model, mode: config.permissionMode, cwd });
+  if (runtime.calibration && !runtime.calibration.ok) {
+    console.log(color(`⚠ Calibration: ${runtime.calibration.reason}`, "yellow"));
+  }
   if (messages.length) console.log(color(`Resumed session ${session.id} (${messages.length} messages).`, "gray"));
 
   onTodosChange((todos) => renderTodos(todos));
@@ -187,7 +191,12 @@ async function handleSlashCommand(line, { config, permissionGate, memory, sessio
       } else {
         console.log(color(`Provider -> ${arg} (${preset.model})`, "green"));
       }
-      return { newProvider: createProvider(config), newProviderLabel: preset.label };
+      const newProvider = createProvider(config);
+      if (!config.skipCalibration && (config.apiKey || config.apiKeyOptional)) {
+        const result = await ensureCalibrated({ provider: newProvider, config, globalDir: config.globalDir });
+        if (!result.ok) console.log(color(`⚠ Calibration: ${result.reason}`, "yellow"));
+      }
+      return { newProvider, newProviderLabel: preset.label };
     }
     case "memory":
       console.log(memory.project ? `Project (${memory.project.path}):\n${memory.project.content}` : "No project memory file.");

@@ -9,11 +9,14 @@ export async function runOneShot({ prompt, flags = {} }) {
     return false;
   };
 
-  const runtime = buildRuntime({ flags, confirm });
+  const runtime = await buildRuntime({ flags, confirm });
   if (runtime.problems.length) {
     for (const p of runtime.problems) console.error(color(`✗ ${p}`, "red"));
     process.exitCode = 1;
     return;
+  }
+  if (runtime.calibration && !runtime.calibration.ok && !flags.quiet) {
+    console.error(color(`⚠ Calibration: ${runtime.calibration.reason}`, "yellow"));
   }
 
   const { config, provider, tools, memory, permissionGate, providerLabel, cwd } = runtime;

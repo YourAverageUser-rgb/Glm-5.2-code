@@ -28,5 +28,9 @@ export const DEFAULT_CONFIG = {
   allowTools: null, // null = all tools allowed (subject to permissionMode); else array of tool names
   denyTools: [],
 
+  // Skip the first-run model calibration check (a throwaway tool-call probe
+  // run once per provider+model+baseURL, cached in ~/.ucode/calibration.json).
+  skipCalibration: false,
+
   hooks: {}, // populated from settings.json: { PreToolUse: [...], PostToolUse: [...], SessionStart: [...] }
 };
