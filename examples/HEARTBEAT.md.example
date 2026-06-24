@@ -1,0 +1,16 @@
+# Heartbeat
+
+Copy this to .ucode/HEARTBEAT.md in your project (or run `ucode heartbeat --init` to generate a
+starter one). `ucode heartbeat [interval]` re-reads this file fresh on every tick, so you can
+edit it between runs without restarting — same idea as OpenClaw's HEARTBEAT.md convention, scoped
+down to whatever tools `ucode` already exposes (shell, files, git, etc.), with no messaging
+platform, email/calendar, or OS-level access bolted on.
+
+Keep instructions concrete, and define what "nothing to report" looks like, so the agent doesn't
+manufacture busywork on quiet ticks.
+
+## Checks
+
+- Run `git status` in this repo. If there are uncommitted changes, summarize what's changed.
+- Run the test suite. If anything is failing that wasn't failing last time, report it.
+- Otherwise, reply "nothing to report".

@@ -161,6 +161,7 @@ the newly selected model.
 /agents                 list available subagent types
 /jobs                   list background processes started via run_command
 /loop <interval> <prompt>   re-run a prompt on a timer; Ctrl+C to stop
+/heartbeat [interval]       re-run .ucode/HEARTBEAT.md on a timer (default 30m); Ctrl+C to stop
 /clear                  start a fresh session
 /exit, /quit            leave
 ```
@@ -247,6 +248,23 @@ real verification — it never trusts the model's self-report that something is 
 
 Both are non-interactive by default (mutating tool calls are denied unless you pass `--auto`).
 
+### Heartbeat
+
+```bash
+ucode heartbeat --init     # write a starter .ucode/HEARTBEAT.md
+ucode heartbeat            # run it on a timer (default 30m)
+ucode heartbeat 10m --auto
+```
+
+A variant of `loop` inspired by OpenClaw's `HEARTBEAT.md` convention: instead of a fixed prompt,
+each tick re-reads `.ucode/HEARTBEAT.md` (or `~/.ucode/HEARTBEAT.md` as a fallback) fresh off
+disk, so you can edit what it checks for between runs without restarting. It's the same `loop`
+machinery underneath — same stop conditions, same non-interactive-by-default behavior — just
+sourced from a file instead of a CLI argument. This intentionally stops at "periodic file-driven
+check-in using ucode's existing tools"; it does not add messaging-platform integration,
+email/calendar access, browser control, or OS-level takeover. See
+`examples/HEARTBEAT.md.example` for the convention, and mid-REPL as `/heartbeat [interval]`.
+
 ## Sessions
 
 Every turn is saved under `.ucode/sessions/<id>.json`. Resume the most recent with `-c`/
@@ -272,7 +290,8 @@ src/agent/
 src/tools/             individual tool implementations (read/write/edit/glob/grep/bash/...)
 src/skills/            skill loading (.ucode/skills/*.md) + templating
 src/hooks/             PreToolUse/PostToolUse/SessionStart hook execution
-src/automation/        loop.js (continuous re-run) and autoFix.js (diagnose-fix-reverify)
+src/automation/        loop.js (continuous re-run), heartbeat.js (HEARTBEAT.md sourcing),
+                       autoFix.js (diagnose-fix-reverify)
 src/memory/            project/global memory file loading
 src/ui/                REPL, one-shot mode, terminal rendering
 test/                  node:test suite (node --test test/*.test.js)

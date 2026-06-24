@@ -81,6 +81,28 @@ test("startLoopRunner respects an external stop signal between runs", async () =
   assert.equal(runs, 1);
 });
 
+test("startLoopRunner re-evaluates a prompt function fresh on every tick", async () => {
+  const seenPrompts = [];
+  const provider = {
+    async chat({ messages }) {
+      seenPrompts.push(messages[0].content);
+      return { message: { role: "assistant", content: "still working", toolCalls: undefined }, usage: {}, stopReason: "stop" };
+    },
+  };
+  let tick = 0;
+  const { runs } = await startLoopRunner({
+    runtime: baseRuntime(provider),
+    prompt: () => `tick-${++tick}`,
+    intervalMs: 10,
+    maxRuns: 3,
+    ui: { log: () => {} },
+  });
+  assert.equal(runs, 3);
+  assert.ok(seenPrompts[0].startsWith("tick-1"));
+  assert.ok(seenPrompts[1].startsWith("tick-2"));
+  assert.ok(seenPrompts[2].startsWith("tick-3"));
+});
+
 test("runAutoFix returns success immediately when the command passes on the first try", async () => {
   const provider = { async chat() { throw new Error("should not be called"); } };
   const result = await runAutoFix({ runtime: baseRuntime(provider), command: "exit 0", maxAttempts: 3, ui: { log: () => {} } });

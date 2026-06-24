@@ -8,6 +8,7 @@ import { Session } from "../src/agent/session.js";
 import { renderEvent, color } from "../src/ui/render.js";
 import { startLoopRunner, parseInterval } from "../src/automation/loop.js";
 import { runAutoFix } from "../src/automation/autoFix.js";
+import { readHeartbeat, scaffoldHeartbeat } from "../src/automation/heartbeat.js";
 
 const HELP = `Universal Code (ucode) - a model-agnostic terminal coding agent.
 
@@ -15,6 +16,8 @@ Usage:
   ucode                          start interactive session in the current directory
   ucode "<prompt>"                run one prompt non-interactively and exit
   ucode loop <interval> "<prompt>"  re-run a prompt on a timer until stopped (Ctrl+C)
+  ucode heartbeat [interval]      re-run .ucode/HEARTBEAT.md on a timer (default 30m), re-read fresh each tick
+  ucode heartbeat --init          write a starter .ucode/HEARTBEAT.md
   ucode fix "<command>"           run a command; on failure, diagnose & fix, then re-verify
   ucode config set <key> <value>  write a value to ~/.ucode/config.json
   ucode providers                 list built-in provider presets
@@ -69,6 +72,7 @@ function parseArgs(argv) {
       case "--max-attempts": flags.maxAttempts = Number(argv[++i]); break;
       case "--no-calibrate": flags.noCalibrate = true; break;
       case "--recalibrate": flags.recalibrate = true; break;
+      case "--init": flags.init = true; break;
       case "-h": case "--help": flags.help = true; break;
       default: positional.push(a);
     }
@@ -111,6 +115,12 @@ async function main() {
       return;
     }
     await runLoopCommand({ interval, prompt, flags });
+    return;
+  }
+
+  if (positional[0] === "heartbeat") {
+    const interval = positional[1] || "30m";
+    await runHeartbeatCommand({ interval, flags });
     return;
   }
 
@@ -179,6 +189,63 @@ async function runLoopCommand({ interval, prompt, flags }) {
 
   const { runs } = await startLoopRunner({ runtime, session, prompt, intervalMs, maxRuns: flags.maxRuns ?? Infinity, ui, isStopped: () => stopped });
   console.log(color(`Loop finished after ${runs} run(s).`, "gray"));
+}
+
+async function runHeartbeatCommand({ interval, flags }) {
+  const runtime = await buildRuntime({ flags, confirm: nonInteractiveConfirm });
+  if (runtime.problems.length) {
+    for (const p of runtime.problems) console.error(color(`✗ ${p}`, "red"));
+    process.exitCode = 1;
+    return;
+  }
+
+  if (flags.init) {
+    const file = scaffoldHeartbeat(runtime.config);
+    console.log(color(`Wrote starter heartbeat file: ${file}`, "green"));
+    console.log('Edit it with concrete check(s), then run: ucode heartbeat');
+    return;
+  }
+
+  if (!readHeartbeat(runtime.config)) {
+    console.error(color("No .ucode/HEARTBEAT.md found. Run `ucode heartbeat --init` to create a starter one.", "red"));
+    process.exitCode = 1;
+    return;
+  }
+
+  let intervalMs;
+  try {
+    intervalMs = parseInterval(interval);
+  } catch (err) {
+    console.error(err.message);
+    process.exitCode = 1;
+    return;
+  }
+  if (runtime.calibration && !runtime.calibration.ok) {
+    console.error(color(`⚠ Calibration: ${runtime.calibration.reason}`, "yellow"));
+  }
+  if (!flags.auto) {
+    console.error(color("Note: pass --auto for the heartbeat to act on findings without prompting each tick.", "yellow"));
+  }
+
+  const session = new Session(runtime.config);
+  const ui = { log: flags.quiet ? () => {} : renderEvent, askUser: async (question, options) => options[0] ?? "" };
+
+  let stopped = false;
+  process.on("SIGINT", () => {
+    stopped = true;
+    console.error(color("\nStopping heartbeat...", "yellow"));
+  });
+
+  const { runs } = await startLoopRunner({
+    runtime,
+    session,
+    prompt: () => readHeartbeat(runtime.config) ?? "(.ucode/HEARTBEAT.md was removed; nothing to check.)",
+    intervalMs,
+    maxRuns: flags.maxRuns ?? Infinity,
+    ui,
+    isStopped: () => stopped,
+  });
+  console.log(color(`Heartbeat stopped after ${runs} run(s).`, "gray"));
 }
 
 async function runFixCommand({ command, flags }) {

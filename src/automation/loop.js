@@ -23,20 +23,26 @@ async function sleepCancelable(ms, isStopped) {
 const STOP_SENTINEL = "<<LOOP_DONE>>";
 
 /**
- * Re-run the same prompt against the agent loop on a fixed interval until
- * maxRuns is hit, the model's reply contains the stop sentinel, or the
- * caller's stop signal fires (e.g. Ctrl+C). Each run is independent (fresh
- * conversation) so this is meant for monitoring/polling-style prompts, not
- * for continuing a single long task — use a normal turn for that.
+ * Re-run a prompt against the agent loop on a fixed interval until maxRuns is
+ * hit, the model's reply contains the stop sentinel, or the caller's stop
+ * signal fires (e.g. Ctrl+C). Each run is independent (fresh conversation) so
+ * this is meant for monitoring/polling-style prompts, not for continuing a
+ * single long task — use a normal turn for that.
+ *
+ * `prompt` may be a string (fixed every tick) or a function returning a
+ * string, called fresh on every tick — e.g. to re-read an instructions file
+ * that the user can edit between runs without restarting the loop.
  */
 export async function startLoopRunner({ runtime, session, prompt, intervalMs, maxRuns = Infinity, ui, isStopped = () => false }) {
   const { config, provider, tools, memory, permissionGate, providerLabel, cwd } = runtime;
   let runs = 0;
-  const wrappedPrompt = `${prompt}\n\n(This prompt re-runs on a timer until stopped. If the underlying task is now fully done and the loop should stop, include the exact text ${STOP_SENTINEL} somewhere in your reply.)`;
 
   while (runs < maxRuns && !isStopped()) {
     runs++;
     process.stdout.write(color(`\n[loop ${runs}${maxRuns !== Infinity ? `/${maxRuns}` : ""}] `, "gray") + new Date().toLocaleTimeString() + "\n");
+
+    const currentPrompt = typeof prompt === "function" ? await prompt() : prompt;
+    const wrappedPrompt = `${currentPrompt}\n\n(This prompt re-runs on a timer until stopped. If the underlying task is now fully done and the loop should stop, include the exact text ${STOP_SENTINEL} somewhere in your reply.)`;
 
     const result = await runAgentLoop({
       config,

@@ -10,6 +10,7 @@ import { resolvePreset, listPresets } from "../config/presets.js";
 import { MODES } from "../agent/permissions.js";
 import { listBackground } from "../tools/processManager.js";
 import { startLoopRunner, parseInterval } from "../automation/loop.js";
+import { readHeartbeat } from "../automation/heartbeat.js";
 import { ensureCalibrated } from "../agent/calibrate.js";
 
 const HELP = `Commands:
@@ -27,6 +28,7 @@ const HELP = `Commands:
   /agents               list available subagent types
   /jobs                 list background processes started via run_command
   /loop <interval> <prompt>   re-run a prompt on a timer (e.g. /loop 10m "check CI status"); Ctrl+C to stop
+  /heartbeat [interval]       re-run .ucode/HEARTBEAT.md on a timer (default 30m), re-read fresh each tick; Ctrl+C to stop
   /clear                start a fresh session
   /exit, /quit          leave
 `;
@@ -282,6 +284,40 @@ async function handleSlashCommand(line, { config, permissionGate, memory, sessio
           isStopped: () => stopped,
         });
         console.log(color(`Loop finished after ${runs} run(s).`, "gray"));
+      } finally {
+        process.off("SIGINT", onSigint);
+      }
+      return;
+    }
+    case "heartbeat": {
+      if (!readHeartbeat(config)) {
+        console.log(color("No .ucode/HEARTBEAT.md found. Create one with instructions to check periodically (see examples/HEARTBEAT.md.example).", "red"));
+        return;
+      }
+      let intervalMs;
+      try {
+        intervalMs = parseInterval(arg || "30m");
+      } catch (err) {
+        console.log(color(err.message, "red"));
+        return;
+      }
+      console.log(color(`Heartbeat every ${arg || "30m"}, re-reading .ucode/HEARTBEAT.md each tick. Press Ctrl+C to stop.`, "gray"));
+      let stopped = false;
+      const onSigint = () => {
+        stopped = true;
+        console.log(color("\nStopping heartbeat...", "yellow"));
+      };
+      process.on("SIGINT", onSigint);
+      try {
+        const { runs } = await startLoopRunner({
+          runtime,
+          session,
+          prompt: () => readHeartbeat(config) ?? "(.ucode/HEARTBEAT.md was removed; nothing to check.)",
+          intervalMs,
+          ui,
+          isStopped: () => stopped,
+        });
+        console.log(color(`Heartbeat finished after ${runs} run(s).`, "gray"));
       } finally {
         process.off("SIGINT", onSigint);
       }

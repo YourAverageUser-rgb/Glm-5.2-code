@@ -43,7 +43,8 @@ src/agent/
 src/tools/             individual tool implementations (read/write/edit/glob/grep/bash/...)
 src/skills/            skill loading (.ucode/skills/*.md) + templating
 src/hooks/             PreToolUse/PostToolUse/SessionStart hook execution
-src/automation/        loop.js (continuous re-run) and autoFix.js (diagnose-fix-reverify)
+src/automation/        loop.js (continuous re-run), heartbeat.js (.ucode/HEARTBEAT.md sourcing,
+                       re-read fresh each tick), autoFix.js (diagnose-fix-reverify)
 src/memory/            project/global memory file loading
 src/ui/                REPL, one-shot mode, terminal rendering
 test/                  node:test suite (one *.test.js file per module, same basename)
