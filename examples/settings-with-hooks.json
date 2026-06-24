@@ -1,0 +1,21 @@
+{
+  "_comment": "Example .ucode/settings.json showing hooks. Copy the 'hooks' block into your project's .ucode/settings.json.",
+
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "run_command",
+        "command": "jq -r .args.command | grep -qE '\\brm\\s+-rf\\b' && { echo 'Blocked: rm -rf is not allowed via hooks policy' >&2; exit 1; } || exit 0"
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "write_file",
+        "command": "jq -r .args.path >> .ucode/edited-files.log"
+      }
+    ],
+    "SessionStart": [
+      { "command": "echo 'session started' >> .ucode/session.log" }
+    ]
+  }
+}

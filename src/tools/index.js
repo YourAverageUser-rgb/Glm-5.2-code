@@ -9,6 +9,7 @@ import { askUserTool } from "./askUser.js";
 import { webFetchTool } from "./webFetch.js";
 import { rememberTool } from "./memoryWrite.js";
 import { createTaskTool } from "./task.js";
+import { createSkillTool } from "./skill.js";
 
 export function buildCoreTools() {
   return [
@@ -27,12 +28,14 @@ export function buildCoreTools() {
   ];
 }
 
-// Core tools + the subagent dispatcher (kept separate because dispatch_agent
-// needs to know about the full tool set in order to hand a subset to subagents).
-export function buildAllTools({ maxSubagentDepth = 1 } = {}) {
+// Core tools + subagent dispatcher + (optionally) skills, all wired together
+// because dispatch_agent needs the full tool set to hand subsets to subagents,
+// and run_skill needs the loaded skill list.
+export function buildAllTools({ maxSubagentDepth = 1, skills = [], subagentTypes = { general: { description: "default", toolFilter: (t) => t } } } = {}) {
   const core = buildCoreTools();
-  const taskTool = createTaskTool({ allTools: core, defaultDepthRemaining: maxSubagentDepth });
-  return [...core, taskTool];
+  const withSkills = skills.length ? [...core, createSkillTool(skills)] : core;
+  const taskTool = createTaskTool({ allTools: withSkills, subagentTypes, defaultDepthRemaining: maxSubagentDepth });
+  return [...withSkills, taskTool];
 }
 
 export function toolsByName(tools) {

@@ -3,12 +3,19 @@ import { startRepl } from "../src/ui/repl.js";
 import { runOneShot } from "../src/ui/oneShot.js";
 import { writeGlobalConfig } from "../src/config/index.js";
 import { listPresets } from "../src/config/presets.js";
+import { buildRuntime } from "../src/agent/runtime.js";
+import { Session } from "../src/agent/session.js";
+import { renderEvent, color } from "../src/ui/render.js";
+import { startLoopRunner, parseInterval } from "../src/automation/loop.js";
+import { runAutoFix } from "../src/automation/autoFix.js";
 
 const HELP = `Universal Code (ucode) - a model-agnostic terminal coding agent.
 
 Usage:
   ucode                          start interactive session in the current directory
   ucode "<prompt>"                run one prompt non-interactively and exit
+  ucode loop <interval> "<prompt>"  re-run a prompt on a timer until stopped (Ctrl+C)
+  ucode fix "<command>"           run a command; on failure, diagnose & fix, then re-verify
   ucode config set <key> <value>  write a value to ~/.ucode/config.json
   ucode providers                 list built-in provider presets
 
@@ -25,6 +32,8 @@ Flags:
   --resume <id>          resume a specific session id
   -p, --print            one-shot mode: print only the final answer
   -q, --quiet            suppress tool-call/result chatter
+  --max-runs <n>         ucode loop: stop after n runs (default: unlimited)
+  --max-attempts <n>     ucode fix: give up after n attempts (default: 5)
   -h, --help             show this help
 
 Configuration (highest precedence first): CLI flags > env vars (UCODE_*) >
@@ -54,6 +63,8 @@ function parseArgs(argv) {
       case "--resume": flags.resume = argv[++i]; break;
       case "-p": case "--print": flags.print = true; break;
       case "-q": case "--quiet": flags.quiet = true; break;
+      case "--max-runs": flags.maxRuns = Number(argv[++i]); break;
+      case "--max-attempts": flags.maxAttempts = Number(argv[++i]); break;
       case "-h": case "--help": flags.help = true; break;
       default: positional.push(a);
     }
@@ -87,6 +98,29 @@ async function main() {
     return;
   }
 
+  if (positional[0] === "loop") {
+    const interval = positional[1];
+    const prompt = positional.slice(2).join(" ");
+    if (!interval || !prompt) {
+      console.error('Usage: ucode loop <interval> "<prompt>" [--max-runs N]');
+      process.exitCode = 1;
+      return;
+    }
+    await runLoopCommand({ interval, prompt, flags });
+    return;
+  }
+
+  if (positional[0] === "fix") {
+    const command = positional.slice(1).join(" ");
+    if (!command) {
+      console.error('Usage: ucode fix "<command>" [--max-attempts N]');
+      process.exitCode = 1;
+      return;
+    }
+    await runFixCommand({ command, flags });
+    return;
+  }
+
   if (positional.length > 0) {
     await runOneShot({ prompt: positional.join(" "), flags });
     return;
@@ -100,6 +134,60 @@ async function main() {
   }
 
   await startRepl({ flags });
+}
+
+function nonInteractiveConfirm(tool) {
+  process.stderr.write(color(`(non-interactive: denying "${tool.name}"; pass --auto to allow mutating actions without prompts)\n`, "yellow"));
+  return Promise.resolve(false);
+}
+
+async function runLoopCommand({ interval, prompt, flags }) {
+  let intervalMs;
+  try {
+    intervalMs = parseInterval(interval);
+  } catch (err) {
+    console.error(err.message);
+    process.exitCode = 1;
+    return;
+  }
+
+  const runtime = buildRuntime({ flags, confirm: nonInteractiveConfirm });
+  if (runtime.problems.length) {
+    for (const p of runtime.problems) console.error(color(`✗ ${p}`, "red"));
+    process.exitCode = 1;
+    return;
+  }
+  if (!flags.auto) {
+    console.error(color("Note: pass --auto for the loop to apply edits/commands without prompting (otherwise they're denied each run).", "yellow"));
+  }
+
+  const session = new Session(runtime.config);
+  const ui = { log: flags.quiet ? () => {} : renderEvent, askUser: async (question, options) => options[0] ?? "" };
+
+  let stopped = false;
+  process.on("SIGINT", () => {
+    stopped = true;
+    console.error(color("\nStopping loop...", "yellow"));
+  });
+
+  const { runs } = await startLoopRunner({ runtime, session, prompt, intervalMs, maxRuns: flags.maxRuns ?? Infinity, ui, isStopped: () => stopped });
+  console.log(color(`Loop finished after ${runs} run(s).`, "gray"));
+}
+
+async function runFixCommand({ command, flags }) {
+  const runtime = buildRuntime({ flags, confirm: nonInteractiveConfirm });
+  if (runtime.problems.length) {
+    for (const p of runtime.problems) console.error(color(`✗ ${p}`, "red"));
+    process.exitCode = 1;
+    return;
+  }
+  if (!flags.auto) {
+    console.error(color("Note: pass --auto for fixes to actually be applied non-interactively (otherwise edits are denied each attempt).", "yellow"));
+  }
+
+  const ui = { log: flags.quiet ? () => {} : renderEvent, askUser: async (question, options) => options[0] ?? "" };
+  const { success } = await runAutoFix({ runtime, command, maxAttempts: flags.maxAttempts ?? 5, ui });
+  process.exitCode = success ? 0 : 1;
 }
 
 main().catch((err) => {

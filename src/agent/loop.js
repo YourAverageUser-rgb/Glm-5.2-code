@@ -2,6 +2,7 @@ import { toolsByName } from "../tools/index.js";
 import { buildSystemPrompt, buildSubagentSystemPrompt } from "./systemPrompt.js";
 import { ProviderError } from "../providers/base.js";
 import { needsCompaction, compactMessages } from "./session.js";
+import { runHooks } from "../hooks/index.js";
 
 const RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504]);
 
@@ -101,6 +102,13 @@ export async function runAgentLoop({
 
       ui.log?.({ type: "tool-call", name: tool.name, args: call.arguments });
 
+      const preHook = await runHooks("PreToolUse", config.hooks?.PreToolUse, { tool: tool.name, args: call.arguments, cwd });
+      if (preHook.blocked) {
+        ui.log?.({ type: "tool-denied", name: tool.name, reason: preHook.reason });
+        messages.push({ role: "tool", toolCallId: call.id, name: call.name, content: `Blocked by PreToolUse hook: ${preHook.reason}` });
+        continue;
+      }
+
       const verdict = await permissionGate.check(tool, call.arguments);
       if (!verdict.allowed) {
         ui.log?.({ type: "tool-denied", name: tool.name, reason: verdict.reason });
@@ -126,6 +134,8 @@ export async function runAgentLoop({
 
       ui.log?.({ type: "tool-result", name: tool.name, output: result.output, isError: Boolean(result.isError) });
       messages.push({ role: "tool", toolCallId: call.id, name: call.name, content: result.output ?? "" });
+
+      await runHooks("PostToolUse", config.hooks?.PostToolUse, { tool: tool.name, args: call.arguments, output: result.output, isError: Boolean(result.isError) });
     }
 
     if (needsCompaction(messages, config)) {

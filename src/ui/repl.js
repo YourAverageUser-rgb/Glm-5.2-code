@@ -8,6 +8,8 @@ import { buildRuntime } from "../agent/runtime.js";
 import { createProvider } from "../providers/index.js";
 import { resolvePreset, listPresets } from "../config/presets.js";
 import { MODES } from "../agent/permissions.js";
+import { listBackground } from "../tools/processManager.js";
+import { startLoopRunner, parseInterval } from "../automation/loop.js";
 
 const HELP = `Commands:
   /help                 show this help
@@ -20,6 +22,10 @@ const HELP = `Commands:
   /remember <text>      append a fact to project memory
   /sessions             list saved sessions in this project
   /resume <id>          resume a saved session
+  /skills               list available skills (.ucode/skills/*.md)
+  /agents               list available subagent types
+  /jobs                 list background processes started via run_command
+  /loop <interval> <prompt>   re-run a prompt on a timer (e.g. /loop 10m "check CI status"); Ctrl+C to stop
   /clear                start a fresh session
   /exit, /quit          leave
 `;
@@ -41,7 +47,7 @@ export async function startRepl({ flags = {} } = {}) {
     return;
   }
 
-  const { config, tools, memory, permissionGate, cwd } = runtime;
+  const { config, tools, memory, permissionGate, cwd, skills, subagentTypes } = runtime;
   let provider = runtime.provider;
   let providerLabel = runtime.providerLabel;
 
@@ -74,7 +80,17 @@ export async function startRepl({ flags = {} } = {}) {
     if (!trimmed) continue;
 
     if (trimmed.startsWith("/")) {
-      const outcome = await handleSlashCommand(trimmed, { config, permissionGate, memory, session, rl });
+      const outcome = await handleSlashCommand(trimmed, {
+        config,
+        permissionGate,
+        memory,
+        session,
+        rl,
+        skills,
+        subagentTypes,
+        runtime: { config, provider, tools, memory, permissionGate, providerLabel, cwd },
+        ui,
+      });
       if (outcome === "exit") break;
       if (outcome === "clear") {
         session = new Session(config);
@@ -107,7 +123,7 @@ export async function startRepl({ flags = {} } = {}) {
   rl.close();
 }
 
-async function handleSlashCommand(line, { config, permissionGate, memory, session, rl }) {
+async function handleSlashCommand(line, { config, permissionGate, memory, session, rl, skills, subagentTypes, runtime, ui }) {
   const [cmd, ...rest] = line.slice(1).split(/\s+/);
   const arg = rest.join(" ");
 
@@ -196,6 +212,70 @@ async function handleSlashCommand(line, { config, permissionGate, memory, sessio
         return;
       }
       console.log(color(`Use: ucode --resume ${arg} (resuming mid-REPL isn't supported yet; restart with this flag).`, "yellow"));
+      return;
+    }
+    case "skills":
+      if (!skills?.length) {
+        console.log(color("No skills defined yet. Add markdown files under .ucode/skills/.", "gray"));
+        return;
+      }
+      for (const s of skills) console.log(`${color(s.name, "bold")}\t${s.description}`);
+      return;
+    case "agents":
+      for (const [name, t] of Object.entries(subagentTypes ?? {})) {
+        console.log(`${color(name, "bold")}\t${t.description}`);
+      }
+      return;
+    case "jobs": {
+      const jobs = listBackground();
+      if (!jobs.length) {
+        console.log(color("No background processes.", "gray"));
+        return;
+      }
+      for (const j of jobs) {
+        const status = j.exitCode === null ? "running" : `exited ${j.exitCode}`;
+        console.log(`${j.id}\t${status}\t${j.command}`);
+      }
+      return;
+    }
+    case "loop": {
+      if (!arg) {
+        console.log('Usage: /loop <interval> <prompt> (e.g. /loop 10m "check CI status")');
+        return;
+      }
+      const [intervalStr, ...promptParts] = rest;
+      const prompt = promptParts.join(" ").replace(/^"(.*)"$/, "$1");
+      if (!prompt) {
+        console.log('Usage: /loop <interval> <prompt> (e.g. /loop 10m "check CI status")');
+        return;
+      }
+      let intervalMs;
+      try {
+        intervalMs = parseInterval(intervalStr);
+      } catch (err) {
+        console.log(color(err.message, "red"));
+        return;
+      }
+      console.log(color(`Looping every ${intervalStr}. Press Ctrl+C to stop.`, "gray"));
+      let stopped = false;
+      const onSigint = () => {
+        stopped = true;
+        console.log(color("\nStopping loop...", "yellow"));
+      };
+      process.on("SIGINT", onSigint);
+      try {
+        const { runs } = await startLoopRunner({
+          runtime,
+          session,
+          prompt,
+          intervalMs,
+          ui,
+          isStopped: () => stopped,
+        });
+        console.log(color(`Loop finished after ${runs} run(s).`, "gray"));
+      } finally {
+        process.off("SIGINT", onSigint);
+      }
       return;
     }
     default:
