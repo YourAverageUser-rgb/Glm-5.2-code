@@ -2,12 +2,12 @@ import readline from "node:readline/promises";
 import { stdin, stdout } from "node:process";
 import { runAgentLoop } from "../agent/loop.js";
 import { Session, latestSession, listSessions } from "../agent/session.js";
-import { renderEvent, renderBanner, renderTodos, color, setTheme } from "./render.js";
+import { renderEvent, renderBanner, renderTodos, color, setTheme, startThinking, stopThinking } from "./render.js";
 import { onTodosChange } from "../tools/todoStore.js";
 import { buildRuntime } from "../agent/runtime.js";
 import { createProvider } from "../providers/index.js";
 import { resolvePreset, listPresets } from "../config/presets.js";
-import { MODES } from "../agent/permissions.js";
+import { MODES, nextMode } from "../agent/permissions.js";
 import { listBackground } from "../tools/processManager.js";
 import { startLoopRunner, parseInterval } from "../automation/loop.js";
 import { readHeartbeat } from "../automation/heartbeat.js";
@@ -15,6 +15,7 @@ import { ensureCalibrated } from "../agent/calibrate.js";
 import { resolveThemes } from "./themes.js";
 
 const HELP = `Commands:
+  Shift+Tab             cycle permission mode (best-effort; depends on terminal support)
   /help                 show this help
   /mode <mode>          set permission mode: ${MODES.join(", ")}
   /auto                 shortcut for mode bypassPermissions ("auto mode")
@@ -74,6 +75,8 @@ export async function startRepl({ flags = {} } = {}) {
 
   const ui = {
     log: renderEvent,
+    startThinking,
+    stopThinking,
     askUser: async (question, options) => {
       console.log("\n" + color(question, "bold"));
       options.forEach((o, i) => console.log(`  ${i + 1}. ${o}`));
@@ -83,8 +86,25 @@ export async function startRepl({ flags = {} } = {}) {
     },
   };
 
+  // Shift+Tab is a best-effort convenience: createInterface() already enables
+  // keypress decoding on TTY stdin for its own arrow-key/history handling, so we
+  // just add a second listener rather than re-deriving that setup ourselves.
+  // Not every terminal sends "\x1b[Z" for Shift+Tab (notably some legacy Windows
+  // consoles), so /mode stays the guaranteed fallback.
+  const onKeypress = (_char, key) => {
+    if (key?.sequence !== "\x1b[Z") return;
+    const next = nextMode(config.permissionMode);
+    config.permissionMode = next;
+    permissionGate.setMode(next);
+    rl.setPrompt(promptFor(config));
+    rl.prompt(true);
+  };
+  if (stdin.isTTY) rl.input.on("keypress", onKeypress);
+
   while (true) {
-    const input = await rl.question(color("\n> ", "bold"));
+    rl.setPrompt(promptFor(config));
+    rl.prompt();
+    const input = await new Promise((resolve) => rl.once("line", resolve));
     const trimmed = input.trim();
     if (!trimmed) continue;
 
@@ -130,7 +150,12 @@ export async function startRepl({ flags = {} } = {}) {
     session.save({ messages, usage: result.usage });
   }
 
+  if (stdin.isTTY) rl.input.off("keypress", onKeypress);
   rl.close();
+}
+
+function promptFor(config) {
+  return color(`\n[${config.permissionMode}] > `, "bold");
 }
 
 async function handleSlashCommand(line, { config, permissionGate, memory, session, rl, skills, subagentTypes, plugins, runtime, ui }) {

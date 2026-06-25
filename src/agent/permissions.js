@@ -2,6 +2,11 @@
 // "bypassPermissions" is what the user experiences as "auto mode" / "auto-accept everything".
 export const MODES = ["default", "acceptEdits", "plan", "bypassPermissions"];
 
+export function nextMode(mode) {
+  const idx = MODES.indexOf(mode);
+  return MODES[(idx + 1) % MODES.length];
+}
+
 function matchesAny(name, patterns) {
   if (!patterns) return false;
   return patterns.some((p) => p === name || p === "*" || (p.endsWith("*") && name.startsWith(p.slice(0, -1))));

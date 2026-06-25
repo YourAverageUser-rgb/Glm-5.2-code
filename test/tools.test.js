@@ -21,6 +21,21 @@ test("write_file then read_file round-trips content", async () => {
   assert.match(result.output, /line2/);
 });
 
+test("write_file with append:true adds to an existing file instead of replacing it", async () => {
+  const dir = mkTmpDir();
+  await writeFileTool.execute({ path: "big.txt", content: "part1\n" }, { cwd: dir });
+  await writeFileTool.execute({ path: "big.txt", content: "part2\n", append: true }, { cwd: dir });
+  const content = fs.readFileSync(path.join(dir, "big.txt"), "utf8");
+  assert.equal(content, "part1\npart2\n");
+});
+
+test("write_file with append:true on a nonexistent file creates it", async () => {
+  const dir = mkTmpDir();
+  const result = await writeFileTool.execute({ path: "new.txt", content: "first\n", append: true }, { cwd: dir });
+  assert.equal(result.isError, undefined);
+  assert.equal(fs.readFileSync(path.join(dir, "new.txt"), "utf8"), "first\n");
+});
+
 test("read_file reports a clear error for missing files", async () => {
   const dir = mkTmpDir();
   const result = await readFileTool.execute({ path: "nope.txt" }, { cwd: dir });

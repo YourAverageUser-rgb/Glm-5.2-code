@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process";
+import { exec } from "node:child_process";
 import { startBackground, getBackground, listBackground, killBackground } from "./processManager.js";
 
 const MAX_OUTPUT = 30_000;
@@ -10,9 +10,11 @@ function truncate(s) {
 
 function runForeground(command, cwd, timeoutMs) {
   return new Promise((resolve) => {
-    execFile(
-      "/bin/sh",
-      ["-c", command],
+    // exec() spawns the platform's default shell (cmd.exe on Windows,
+    // /bin/sh elsewhere) -- a hardcoded "/bin/sh" path fails with ENOENT
+    // on Windows since that path doesn't exist there.
+    exec(
+      command,
       { cwd, timeout: timeoutMs, maxBuffer: 1024 * 1024 * 20 },
       (error, stdout, stderr) => {
         if (error?.killed) {

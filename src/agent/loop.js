@@ -6,17 +6,21 @@ import { runHooks } from "../hooks/index.js";
 
 const RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504]);
 
-async function callWithRetry(provider, request, { retries = 3, log } = {}) {
+async function callWithRetry(provider, request, { retries = 3, ui } = {}) {
   let lastErr;
   for (let attempt = 0; attempt <= retries; attempt++) {
+    ui?.startThinking?.();
     try {
-      return await provider.chat(request);
+      const result = await provider.chat(request);
+      ui?.stopThinking?.();
+      return result;
     } catch (err) {
+      ui?.stopThinking?.();
       lastErr = err;
       const retryable = err instanceof ProviderError && (err.status === undefined || RETRYABLE_STATUSES.has(err.status));
       if (!retryable || attempt === retries) throw err;
       const delay = 2 ** attempt * 1000;
-      log?.({ type: "retry", attempt: attempt + 1, delay, error: err.message });
+      ui?.log?.({ type: "retry", attempt: attempt + 1, delay, error: err.message });
       await new Promise((r) => setTimeout(r, delay));
     }
   }
@@ -70,7 +74,7 @@ export async function runAgentLoop({
           apiKey: config.apiKey,
           baseURL: config.baseURL,
         },
-        { log: ui.log }
+        { ui }
       );
     } catch (err) {
       ui.log?.({ type: "error", message: err.message });
@@ -83,6 +87,10 @@ export async function runAgentLoop({
 
     messages.push(response.message);
     onMessage?.(messages);
+
+    if (response.message.reasoning) {
+      ui.log?.({ type: "thinking", text: response.message.reasoning });
+    }
 
     if (response.message.content) {
       ui.log?.({ type: "assistant-text", text: response.message.content });

@@ -58,9 +58,12 @@ test/                  node:test suite (one *.test.js file per module, same base
 ## Conventions
 
 - **Internal message shape** (provider-agnostic, defined in `src/providers/base.js`):
-  `{ role, content, toolCalls?: [{id, name, arguments}], toolCallId?, name? }`. Every
-  `Provider.chat()` implementation must translate to/from this shape, not leak wire format
-  upward.
+  `{ role, content, toolCalls?: [{id, name, arguments}], toolCallId?, name?, reasoning? }`.
+  `reasoning` is assistant-only, display-only (DeepSeek-R1/GLM `reasoning_content`, Anthropic
+  `thinking` blocks) — it's surfaced once via a `"thinking"` UI event in `loop.js` and never fed
+  back into `toWireMessages()`, so adding it doesn't touch wire serialization or multi-turn
+  replay. Every `Provider.chat()` implementation must translate to/from this shape, not leak wire
+  format upward.
 - **Tool shape**: `{ name, description, parameters /* JSON Schema */, riskLevel: "read" |
   "write" | "exec" | "interactive", execute(args, ctx) }`. `riskLevel` drives permission
   decisions in `src/agent/permissions.js` — pick the correct one, don't default to "read".

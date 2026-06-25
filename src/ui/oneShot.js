@@ -1,6 +1,6 @@
 import { runAgentLoop } from "../agent/loop.js";
 import { Session } from "../agent/session.js";
-import { renderEvent, color } from "./render.js";
+import { color, nonInteractiveUi } from "./render.js";
 import { buildRuntime } from "../agent/runtime.js";
 
 export async function runOneShot({ prompt, flags = {} }) {
@@ -22,10 +22,7 @@ export async function runOneShot({ prompt, flags = {} }) {
   const { config, provider, tools, memory, permissionGate, providerLabel, cwd } = runtime;
   const session = new Session(config);
 
-  const ui = {
-    log: flags.quiet ? () => {} : renderEvent,
-    askUser: async (question, options) => options[0] ?? "",
-  };
+  const ui = nonInteractiveUi({ quiet: flags.quiet });
 
   const result = await runAgentLoop({
     config,

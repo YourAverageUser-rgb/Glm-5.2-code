@@ -108,3 +108,35 @@ test("agent loop stops after maxAgentIterations to avoid runaway loops", async (
   assert.equal(result.iterations, 3);
   assert.match(result.finalText, /max agent iterations/);
 });
+
+test("agent loop logs a thinking event for reasoning content and drives the spinner", async () => {
+  const dir = mkTmpDir();
+  const provider = makeFakeProvider([
+    { message: { role: "assistant", content: "Done.", reasoning: "step by step", toolCalls: undefined }, usage: { inputTokens: 1, outputTokens: 1 }, stopReason: "stop" },
+  ]);
+
+  const events = [];
+  let starts = 0;
+  let stops = 0;
+  const permissionGate = new PermissionGate({ mode: "bypassPermissions" });
+  await runAgentLoop({
+    config: baseConfig(),
+    provider,
+    tools: [writeFileTool],
+    initialMessages: [{ role: "user", content: "explain" }],
+    cwd: dir,
+    permissionGate,
+    ui: {
+      log: (e) => events.push(e),
+      startThinking: () => starts++,
+      stopThinking: () => stops++,
+    },
+  });
+
+  assert.equal(starts, 1);
+  assert.equal(stops, 1);
+  const thinkingEvent = events.find((e) => e.type === "thinking");
+  assert.equal(thinkingEvent?.text, "step by step");
+  const textEvent = events.find((e) => e.type === "assistant-text");
+  assert.equal(textEvent?.text, "Done.");
+});

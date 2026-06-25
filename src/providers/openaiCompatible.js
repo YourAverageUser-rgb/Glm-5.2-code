@@ -74,10 +74,15 @@ export class OpenAICompatibleProvider extends Provider {
     const stopReason =
       choice?.finish_reason === "tool_calls" ? "tool_use" : choice?.finish_reason === "length" ? "length" : "stop";
 
+    // DeepSeek-R1, GLM (thinking mode), and several other reasoning models return the
+    // chain-of-thought separately from the final answer as `reasoning_content`.
+    const reasoning = msg.reasoning_content || msg.reasoning || null;
+
     return {
       message: {
         role: "assistant",
         content: msg.content ?? null,
+        reasoning: reasoning || undefined,
         toolCalls: toolCalls.length ? toolCalls : undefined,
       },
       usage: {

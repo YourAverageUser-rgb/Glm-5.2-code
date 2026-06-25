@@ -58,9 +58,11 @@ export class AnthropicProvider extends Provider {
     );
 
     const textParts = [];
+    const reasoningParts = [];
     const toolCalls = [];
     for (const block of json.content ?? []) {
       if (block.type === "text") textParts.push(block.text);
+      if (block.type === "thinking") reasoningParts.push(block.thinking);
       if (block.type === "tool_use") toolCalls.push({ id: block.id, name: block.name, arguments: block.input ?? {} });
     }
 
@@ -70,6 +72,7 @@ export class AnthropicProvider extends Provider {
       message: {
         role: "assistant",
         content: textParts.length ? textParts.join("\n") : null,
+        reasoning: reasoningParts.length ? reasoningParts.join("\n") : undefined,
         toolCalls: toolCalls.length ? toolCalls : undefined,
       },
       usage: {

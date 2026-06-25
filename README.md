@@ -15,10 +15,14 @@ models via Ollama/LM Studio, or any other OpenAI-compatible or Anthropic-compati
 
 - **Any model, any provider** — named presets for common providers, or point at a fully custom
   endpoint. Swap providers/models mid-session with `/provider` and `/model`.
-- **Full tool suite** — read/write/edit files, glob, grep, run shell commands (foreground or
-  background), manage todos, fetch URLs, ask the user a question, write to persistent memory.
+- **Full tool suite** — read/write/edit files (including append, for building up large files
+  across many calls), glob, grep, run shell commands (foreground or background), manage todos,
+  fetch URLs, ask the user a question, write to persistent memory.
 - **Permission modes** — `default`, `acceptEdits`, `plan`, `bypassPermissions` ("auto mode"),
-  plus per-tool allow/deny lists.
+  shown in the prompt and cycled with Shift+Tab (or `/mode`/`/auto`/`/plan`), plus per-tool
+  allow/deny lists.
+- **Live feedback** — a spinner with elapsed time while waiting on the model, and the model's
+  reasoning/"thinking" content (when the provider returns it) rendered before the final answer.
 - **Persistent memory** — project memory files (`UCODE.md` / `AGENTS.md` / `CLAUDE.md`) and a
   global `~/.ucode/MEMORY.md`, loaded into every session and updatable via `remember`.
 - **Sessions** — every conversation is saved to disk and resumable; long conversations are
@@ -118,9 +122,13 @@ providers) or `"anthropic"` (native Anthropic Messages API).
 | `bypassPermissions` ("auto mode") | allow | allow | allow |
 
 Switch modes with `--permission-mode <mode>` / `--auto` / `--plan` at launch, or `/mode`,
-`/auto`, `/plan` mid-session. Per-tool overrides via `allowTools`/`denyTools` in settings always
-win over the mode (deny-list checked first, then allow-list, then mode logic). Interactive tools
-(asking the user a question) are always allowed regardless of mode.
+`/auto`, `/plan` mid-session. In the interactive REPL the current mode is always shown in the
+prompt (e.g. `[acceptEdits] >`), and **Shift+Tab** cycles to the next mode without typing a
+command — this is best-effort since not every terminal sends a distinguishable sequence for
+Shift+Tab (notably some legacy Windows consoles), so the slash commands are the guaranteed
+fallback. Per-tool overrides via `allowTools`/`denyTools` in settings always win over the mode
+(deny-list checked first, then allow-list, then mode logic). Interactive tools (asking the user a
+question) are always allowed regardless of mode.
 
 ## Memory
 
@@ -154,6 +162,7 @@ the newly selected model.
 ## Slash commands (interactive REPL)
 
 ```
+Shift+Tab             cycle permission mode (best-effort; depends on terminal support)
 /help                 show this help
 /mode <mode>          set permission mode: default, acceptEdits, plan, bypassPermissions
 /auto                 shortcut for mode bypassPermissions ("auto mode")

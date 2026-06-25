@@ -1,6 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { decide, PermissionGate } from "../src/agent/permissions.js";
+import { decide, PermissionGate, MODES, nextMode } from "../src/agent/permissions.js";
+
+test("nextMode cycles through all modes and wraps around", () => {
+  for (let i = 0; i < MODES.length; i++) {
+    assert.equal(nextMode(MODES[i]), MODES[(i + 1) % MODES.length]);
+  }
+});
 
 test("plan mode allows reads, denies writes and exec", () => {
   assert.equal(decide({ toolName: "read_file", riskLevel: "read", mode: "plan" }), "allow");

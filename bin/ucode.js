@@ -5,7 +5,7 @@ import { writeGlobalConfig, loadConfig } from "../src/config/index.js";
 import { listPresets } from "../src/config/presets.js";
 import { buildRuntime } from "../src/agent/runtime.js";
 import { Session } from "../src/agent/session.js";
-import { renderEvent, color } from "../src/ui/render.js";
+import { color, nonInteractiveUi } from "../src/ui/render.js";
 import { startLoopRunner, parseInterval } from "../src/automation/loop.js";
 import { runAutoFix } from "../src/automation/autoFix.js";
 import { readHeartbeat, scaffoldHeartbeat } from "../src/automation/heartbeat.js";
@@ -214,7 +214,7 @@ async function runLoopCommand({ interval, prompt, flags }) {
   }
 
   const session = new Session(runtime.config);
-  const ui = { log: flags.quiet ? () => {} : renderEvent, askUser: async (question, options) => options[0] ?? "" };
+  const ui = nonInteractiveUi({ quiet: flags.quiet });
 
   let stopped = false;
   process.on("SIGINT", () => {
@@ -263,7 +263,7 @@ async function runHeartbeatCommand({ interval, flags }) {
   }
 
   const session = new Session(runtime.config);
-  const ui = { log: flags.quiet ? () => {} : renderEvent, askUser: async (question, options) => options[0] ?? "" };
+  const ui = nonInteractiveUi({ quiet: flags.quiet });
 
   let stopped = false;
   process.on("SIGINT", () => {
@@ -297,7 +297,7 @@ async function runFixCommand({ command, flags }) {
     console.error(color("Note: pass --auto for fixes to actually be applied non-interactively (otherwise edits are denied each attempt).", "yellow"));
   }
 
-  const ui = { log: flags.quiet ? () => {} : renderEvent, askUser: async (question, options) => options[0] ?? "" };
+  const ui = nonInteractiveUi({ quiet: flags.quiet });
   const { success } = await runAutoFix({ runtime, command, maxAttempts: flags.maxAttempts ?? 5, ui });
   process.exitCode = success ? 0 : 1;
 }
