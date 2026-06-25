@@ -195,9 +195,9 @@ wireframe, a diagram of a build, a whiteboard of architecture notes — attach t
 
 ```bash
 # Interactive REPL: stage one or more images, then type your request normally.
-[default] > /image ./mockups/dashboard.png
+ default ❯ /image ./mockups/dashboard.png
 📎 Attached dashboard.png (image/png, 412 KB). It'll be sent with your next message.
-[default] 📎1 > recreate this layout as a React component
+ default 📎 1 ❯ recreate this layout as a React component
 
 # One-shot: --image is repeatable.
 ucode --image sketch.jpg --image notes.png "build the data model these sketch out"

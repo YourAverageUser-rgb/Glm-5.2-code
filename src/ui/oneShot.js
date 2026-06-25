@@ -1,6 +1,6 @@
 import { runAgentLoop } from "../agent/loop.js";
 import { Session } from "../agent/session.js";
-import { color, nonInteractiveUi } from "./render.js";
+import { color, nonInteractiveUi, divider } from "./render.js";
 import { buildRuntime } from "../agent/runtime.js";
 import { loadImage } from "../util/images.js";
 
@@ -54,5 +54,5 @@ export async function runOneShot({ prompt, flags = {} }) {
   });
 
   session.save({ messages: result.messages, usage: result.usage });
-  console.log(flags.quiet ? result.finalText : "\n" + color("── result ──", "gray") + "\n" + result.finalText);
+  console.log(flags.quiet ? result.finalText : "\n" + divider("result") + "\n" + result.finalText);
 }

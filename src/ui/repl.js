@@ -2,7 +2,7 @@ import readline from "node:readline/promises";
 import { stdin, stdout } from "node:process";
 import { runAgentLoop } from "../agent/loop.js";
 import { Session, latestSession, listSessions } from "../agent/session.js";
-import { renderEvent, renderBanner, renderTodos, color, setTheme, startThinking, stopThinking } from "./render.js";
+import { renderEvent, renderBanner, renderTodos, color, setTheme, startThinking, stopThinking, modeBadge } from "./render.js";
 import { onTodosChange } from "../tools/todoStore.js";
 import { buildRuntime } from "../agent/runtime.js";
 import { createProvider } from "../providers/index.js";
@@ -168,8 +168,8 @@ export async function startRepl({ flags = {} } = {}) {
 }
 
 function promptFor(config, pendingImages = []) {
-  const attachment = pendingImages.length ? color(` 📎${pendingImages.length}`, "cyan") : "";
-  return color(`\n[${config.permissionMode}]`, "bold") + attachment + color(" > ", "bold");
+  const attachment = pendingImages.length ? color(` 📎 ${pendingImages.length}`, "cyan") : "";
+  return "\n" + modeBadge(config.permissionMode) + attachment + " " + color("❯", "cyan") + " ";
 }
 
 async function handleSlashCommand(line, { config, permissionGate, memory, session, rl, cwd, pendingImages, skills, subagentTypes, plugins, runtime, ui }) {
