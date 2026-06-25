@@ -43,10 +43,15 @@ src/agent/
 src/tools/             individual tool implementations (read/write/edit/glob/grep/bash/...)
 src/skills/            skill loading (.ucode/skills/*.md) + templating
 src/hooks/             PreToolUse/PostToolUse/SessionStart hook execution
+src/plugins/           plugin loading (.ucode/plugins/<name>/, bundles skills/agents/themes/hooks)
+src/util/              resourceFiles.js: shared frontmatter/JSON parsing used by skills/agents/
+                       themes/plugins -- keep this dependency-free (no imports from plugins/,
+                       skills/, or agent/subagentTypes.js) to avoid import cycles
 src/automation/        loop.js (continuous re-run), heartbeat.js (.ucode/HEARTBEAT.md sourcing,
                        re-read fresh each tick), autoFix.js (diagnose-fix-reverify)
 src/memory/            project/global memory file loading
-src/ui/                REPL, one-shot mode, terminal rendering
+src/ui/                REPL, one-shot mode, terminal rendering, themes.js (built-in + custom
+                       theme resolution and ANSI compilation)
 test/                  node:test suite (one *.test.js file per module, same basename)
 ```
 
@@ -84,6 +89,12 @@ test/                  node:test suite (one *.test.js file per module, same base
 - **New builtin subagent type or skill**: see `src/agent/subagentTypes.js` /
   `src/skills/index.js`; custom ones are just markdown files under `.ucode/agents/` /
   `.ucode/skills/` and need no code changes.
+- **New builtin theme**: add an entry to `BUILTIN_THEMES` in `src/ui/themes.js`; custom ones are
+  JSON files under `.ucode/themes/` / `~/.ucode/themes/` and need no code changes.
+- **Plugins**: `.ucode/plugins/<name>/` (or `~/.ucode/plugins/<name>/`) bundles skills/agents/
+  themes/hooks for a single name using the same file conventions as their standalone forms (see
+  `src/plugins/index.js`). On a name collision, project-level standalone definitions win over a
+  plugin's.
 
 ## Before committing
 

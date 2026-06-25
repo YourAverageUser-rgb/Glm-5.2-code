@@ -8,12 +8,27 @@ import { loadSkills } from "../skills/index.js";
 import { resolveSubagentTypes } from "./subagentTypes.js";
 import { runHooks } from "../hooks/index.js";
 import { ensureCalibrated } from "./calibrate.js";
+import { loadPlugins } from "../plugins/index.js";
+import { resolveThemes } from "../ui/themes.js";
+import { setTheme, color } from "../ui/render.js";
+
+function mergePluginHooks(baseHooks, plugins) {
+  const merged = { PreToolUse: [...(baseHooks?.PreToolUse ?? [])], PostToolUse: [...(baseHooks?.PostToolUse ?? [])], SessionStart: [...(baseHooks?.SessionStart ?? [])] };
+  for (const plugin of plugins) {
+    for (const key of Object.keys(merged)) {
+      if (plugin.hooks?.[key]) merged[key].push(...plugin.hooks[key]);
+    }
+  }
+  return merged;
+}
 
 export async function buildRuntime({ cwd = process.cwd(), flags = {}, confirm } = {}) {
   const config = loadConfig({ cwd, flags });
   const problems = validateConfig(config);
 
   const provider = problems.length ? null : createProvider(config);
+  const plugins = loadPlugins(config);
+  config.hooks = mergePluginHooks(config.hooks, plugins);
   const skills = loadSkills(config);
   const subagentTypes = resolveSubagentTypes(config);
   const tools = buildAllTools({ maxSubagentDepth: 1, skills, subagentTypes });
@@ -24,6 +39,15 @@ export async function buildRuntime({ cwd = process.cwd(), flags = {}, confirm } 
     denyTools: config.denyTools,
     confirm,
   });
+
+  const themes = resolveThemes(config);
+  const themeDef = themes[config.theme];
+  if (themeDef) {
+    setTheme(themeDef);
+  } else {
+    setTheme(themes.default);
+    process.stderr.write(color(`⚠ Unknown theme "${config.theme}"; using default. Run \`ucode themes\` to see available themes.\n`, "yellow"));
+  }
 
   const preset = listPresets().find((p) => p.name === config.provider);
   const providerLabel = preset?.label ?? config.provider;
@@ -36,5 +60,5 @@ export async function buildRuntime({ cwd = process.cwd(), flags = {}, confirm } 
     }
   }
 
-  return { config, problems, provider, tools, memory, permissionGate, providerLabel, skills, subagentTypes, calibration, cwd: config.projectRoot ?? cwd };
+  return { config, problems, provider, tools, memory, permissionGate, providerLabel, skills, subagentTypes, plugins, themes, calibration, cwd: config.projectRoot ?? cwd };
 }

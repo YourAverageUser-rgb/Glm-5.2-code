@@ -1,21 +1,19 @@
-const CODES = {
-  reset: 0,
-  bold: 1,
-  dim: 2,
-  red: 31,
-  green: 32,
-  yellow: 33,
-  blue: 34,
-  magenta: 35,
-  cyan: 36,
-  gray: 90,
-};
+import { BUILTIN_THEMES, compileTheme } from "./themes.js";
+
+let activeTheme = compileTheme(BUILTIN_THEMES.default);
+
+/** Switch the colors used by color()/renderEvent()/etc. Pass a theme definition (the `{ colors }` shape from themes.js), not a compiled one. */
+export function setTheme(themeDef) {
+  activeTheme = compileTheme(themeDef);
+}
 
 const isTTY = process.stdout.isTTY;
 
 export function color(text, name) {
   if (!isTTY) return text;
-  return `\x1b[${CODES[name]}m${text}\x1b[0m`;
+  const code = activeTheme[name];
+  if (!code) return text;
+  return `${code}${text}\x1b[0m`;
 }
 
 function truncateForDisplay(text, max = 400) {

@@ -1,0 +1,15 @@
+{
+  "_comment": "Example .ucode/themes/<name>.json. Copy this file (minus _comment) into .ucode/themes/ or ~/.ucode/themes/, drop the _comment key, and name the file after your theme (or set a 'name' field). Colors are either a classic ANSI SGR code (number, e.g. 31) or a '#rrggbb' hex string (rendered as 24-bit truecolor). Omit any slot you don't want to override -- it falls back to the default theme's value. Use null to disable color for a slot entirely.",
+
+  "name": "midnight",
+  "description": "Deep blues and a single warm accent, for low-light rooms.",
+  "colors": {
+    "red": "#e06c75",
+    "green": "#98c379",
+    "yellow": "#e5c07b",
+    "blue": "#61afef",
+    "magenta": "#c678dd",
+    "cyan": "#56b6c2",
+    "gray": "#5c6370"
+  }
+}

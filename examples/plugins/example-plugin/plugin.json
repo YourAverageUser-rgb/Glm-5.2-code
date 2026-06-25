@@ -1,0 +1,5 @@
+{
+  "name": "example-plugin",
+  "description": "Demonstrates the plugin convention: bundles a skill and a theme in one distributable directory.",
+  "version": "1.0.0"
+}

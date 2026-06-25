@@ -22,8 +22,14 @@ export const DEFAULT_CONFIG = {
   globalMemoryFile: "MEMORY.md", // under ~/.ucode/
 
   skillsDir: ".ucode/skills",
+  themesDir: ".ucode/themes",
+  pluginsDir: ".ucode/plugins",
   settingsFile: ".ucode/settings.json",
   sessionsDir: ".ucode/sessions",
+
+  // Name of the active color theme (see src/ui/themes.js for built-ins, or
+  // drop a custom one in .ucode/themes/<name>.json / ~/.ucode/themes/<name>.json).
+  theme: "default",
 
   allowTools: null, // null = all tools allowed (subject to permissionMode); else array of tool names
   denyTools: [],

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { startRepl } from "../src/ui/repl.js";
 import { runOneShot } from "../src/ui/oneShot.js";
-import { writeGlobalConfig } from "../src/config/index.js";
+import { writeGlobalConfig, loadConfig } from "../src/config/index.js";
 import { listPresets } from "../src/config/presets.js";
 import { buildRuntime } from "../src/agent/runtime.js";
 import { Session } from "../src/agent/session.js";
@@ -9,6 +9,8 @@ import { renderEvent, color } from "../src/ui/render.js";
 import { startLoopRunner, parseInterval } from "../src/automation/loop.js";
 import { runAutoFix } from "../src/automation/autoFix.js";
 import { readHeartbeat, scaffoldHeartbeat } from "../src/automation/heartbeat.js";
+import { resolveThemes } from "../src/ui/themes.js";
+import { loadPlugins } from "../src/plugins/index.js";
 
 const HELP = `Universal Code (ucode) - a model-agnostic terminal coding agent.
 
@@ -21,6 +23,8 @@ Usage:
   ucode fix "<command>"           run a command; on failure, diagnose & fix, then re-verify
   ucode config set <key> <value>  write a value to ~/.ucode/config.json
   ucode providers                 list built-in provider presets
+  ucode themes                    list available color themes (built-in, plugin, custom)
+  ucode plugins                   list installed plugins (.ucode/plugins/, ~/.ucode/plugins/)
 
 Flags:
   --provider <name>      provider preset (${listPresets().map((p) => p.name).join(", ")}), default: glm
@@ -31,6 +35,7 @@ Flags:
   --permission-mode <m>  default | acceptEdits | plan | bypassPermissions
   --auto                 shortcut for --permission-mode bypassPermissions
   --plan                 shortcut for --permission-mode plan
+  --theme <name>         color theme (default, dracula, solarized-dark, nord, monochrome, or custom), default: default
   -c, --continue         resume the most recent session in this project
   --resume <id>          resume a specific session id
   -p, --print            one-shot mode: print only the final answer
@@ -72,6 +77,7 @@ function parseArgs(argv) {
       case "--max-attempts": flags.maxAttempts = Number(argv[++i]); break;
       case "--no-calibrate": flags.noCalibrate = true; break;
       case "--recalibrate": flags.recalibrate = true; break;
+      case "--theme": flags.theme = argv[++i]; break;
       case "--init": flags.init = true; break;
       case "-h": case "--help": flags.help = true; break;
       default: positional.push(a);
@@ -91,6 +97,35 @@ async function main() {
 
   if (positional[0] === "providers") {
     for (const p of listPresets()) console.log(`${p.name.padEnd(14)} ${p.label}  (model: ${p.model})`);
+    return;
+  }
+
+  if (positional[0] === "themes") {
+    const config = loadConfig({ flags });
+    const themes = resolveThemes(config);
+    for (const [name, def] of Object.entries(themes)) {
+      const marker = name === config.theme ? "*" : " ";
+      console.log(`${marker} ${name.padEnd(16)} ${(def.description ?? "").padEnd(58)} (${def.source})`);
+    }
+    return;
+  }
+
+  if (positional[0] === "plugins") {
+    const config = loadConfig({ flags });
+    const plugins = loadPlugins(config);
+    if (!plugins.length) {
+      console.log("No plugins installed. Drop a directory under .ucode/plugins/<name>/ or ~/.ucode/plugins/<name>/.");
+      return;
+    }
+    for (const p of plugins) {
+      const parts = [];
+      if (p.skills.length) parts.push(`${p.skills.length} skill(s)`);
+      if (Object.keys(p.agents).length) parts.push(`${Object.keys(p.agents).length} agent(s)`);
+      if (Object.keys(p.themes).length) parts.push(`${Object.keys(p.themes).length} theme(s)`);
+      if (Object.keys(p.hooks).length) parts.push("hooks");
+      console.log(`${p.name}${p.version ? `@${p.version}` : ""}  (${p.source})  ${p.description}`.trim());
+      console.log(`  provides: ${parts.join(", ") || "nothing"}`);
+    }
     return;
   }
 

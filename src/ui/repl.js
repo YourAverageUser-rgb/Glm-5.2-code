@@ -2,7 +2,7 @@ import readline from "node:readline/promises";
 import { stdin, stdout } from "node:process";
 import { runAgentLoop } from "../agent/loop.js";
 import { Session, latestSession, listSessions } from "../agent/session.js";
-import { renderEvent, renderBanner, renderTodos, color } from "./render.js";
+import { renderEvent, renderBanner, renderTodos, color, setTheme } from "./render.js";
 import { onTodosChange } from "../tools/todoStore.js";
 import { buildRuntime } from "../agent/runtime.js";
 import { createProvider } from "../providers/index.js";
@@ -12,6 +12,7 @@ import { listBackground } from "../tools/processManager.js";
 import { startLoopRunner, parseInterval } from "../automation/loop.js";
 import { readHeartbeat } from "../automation/heartbeat.js";
 import { ensureCalibrated } from "../agent/calibrate.js";
+import { resolveThemes } from "./themes.js";
 
 const HELP = `Commands:
   /help                 show this help
@@ -26,6 +27,8 @@ const HELP = `Commands:
   /resume <id>          resume a saved session
   /skills               list available skills (.ucode/skills/*.md)
   /agents               list available subagent types
+  /theme [name]         show or switch color theme (default, dracula, solarized-dark, nord, monochrome, or custom)
+  /plugins              list installed plugins (.ucode/plugins/, ~/.ucode/plugins/)
   /jobs                 list background processes started via run_command
   /loop <interval> <prompt>   re-run a prompt on a timer (e.g. /loop 10m "check CI status"); Ctrl+C to stop
   /heartbeat [interval]       re-run .ucode/HEARTBEAT.md on a timer (default 30m), re-read fresh each tick; Ctrl+C to stop
@@ -50,7 +53,7 @@ export async function startRepl({ flags = {} } = {}) {
     return;
   }
 
-  const { config, tools, memory, permissionGate, cwd, skills, subagentTypes } = runtime;
+  const { config, tools, memory, permissionGate, cwd, skills, subagentTypes, plugins } = runtime;
   let provider = runtime.provider;
   let providerLabel = runtime.providerLabel;
 
@@ -94,6 +97,7 @@ export async function startRepl({ flags = {} } = {}) {
         rl,
         skills,
         subagentTypes,
+        plugins,
         runtime: { config, provider, tools, memory, permissionGate, providerLabel, cwd },
         ui,
       });
@@ -129,7 +133,7 @@ export async function startRepl({ flags = {} } = {}) {
   rl.close();
 }
 
-async function handleSlashCommand(line, { config, permissionGate, memory, session, rl, skills, subagentTypes, runtime, ui }) {
+async function handleSlashCommand(line, { config, permissionGate, memory, session, rl, skills, subagentTypes, plugins, runtime, ui }) {
   const [cmd, ...rest] = line.slice(1).split(/\s+/);
   const arg = rest.join(" ");
 
@@ -235,6 +239,40 @@ async function handleSlashCommand(line, { config, permissionGate, memory, sessio
     case "agents":
       for (const [name, t] of Object.entries(subagentTypes ?? {})) {
         console.log(`${color(name, "bold")}\t${t.description}`);
+      }
+      return;
+    case "theme": {
+      const themes = resolveThemes(config);
+      if (!arg) {
+        for (const [name, def] of Object.entries(themes)) {
+          const marker = name === config.theme ? "*" : " ";
+          console.log(`${marker} ${color(name.padEnd(16), "bold")} ${def.description ?? ""}  (${def.source})`);
+        }
+        return;
+      }
+      const themeDef = themes[arg];
+      if (!themeDef) {
+        console.log(color(`Unknown theme "${arg}". Run /theme with no argument to see available themes.`, "red"));
+        return;
+      }
+      config.theme = arg;
+      setTheme(themeDef);
+      console.log(color(`Theme -> ${arg}`, "green"));
+      return;
+    }
+    case "plugins":
+      if (!plugins?.length) {
+        console.log(color("No plugins installed. Drop a directory under .ucode/plugins/<name>/ or ~/.ucode/plugins/<name>/.", "gray"));
+        return;
+      }
+      for (const p of plugins) {
+        const parts = [];
+        if (p.skills.length) parts.push(`${p.skills.length} skill(s)`);
+        if (Object.keys(p.agents).length) parts.push(`${Object.keys(p.agents).length} agent(s)`);
+        if (Object.keys(p.themes).length) parts.push(`${Object.keys(p.themes).length} theme(s)`);
+        if (Object.keys(p.hooks).length) parts.push("hooks");
+        console.log(`${color(p.name, "bold")}${p.version ? `@${p.version}` : ""}  (${p.source})  ${p.description}`.trim());
+        console.log(color(`  provides: ${parts.join(", ") || "nothing"}`, "gray"));
       }
       return;
     case "jobs": {

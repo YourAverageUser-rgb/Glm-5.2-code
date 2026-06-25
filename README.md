@@ -28,6 +28,10 @@ models via Ollama/LM Studio, or any other OpenAI-compatible or Anthropic-compati
 - **Skills** — drop a markdown playbook in `.ucode/skills/` and the agent can invoke it by name.
 - **Hooks** — shell commands that run before/after tool calls (can block a tool call) or on
   session start, configured in `.ucode/settings.json`.
+- **Themes** — five built-in color palettes (`default`, `dracula`, `solarized-dark`, `nord`,
+  `monochrome`) plus your own custom themes dropped in `.ucode/themes/*.json`.
+- **Plugins** — bundle skills, subagents, themes, and hooks into one shareable directory under
+  `.ucode/plugins/<name>/` or `~/.ucode/plugins/<name>/`.
 - **Continuous loops** — `ucode loop <interval> "<prompt>"` re-runs a prompt on a timer
   (polling/monitoring use cases) until it self-reports done or you stop it.
 - **Auto-fix** — `ucode fix "<command>"` runs a command (test/build/lint); on failure it hands
@@ -65,6 +69,9 @@ ucode                          # interactive session in the current directory
 ucode "explain this codebase"  # one-shot, non-interactive
 ucode --auto "fix the failing test in src/foo.js"   # auto-accept edits/commands, no prompts
 ucode providers                # list built-in provider presets
+ucode themes                   # list built-in + custom + plugin themes
+ucode plugins                  # list installed plugins
+ucode --theme dracula "..."    # one-off theme override
 ucode loop 10m "check CI status and report any failures"
 ucode fix "npm test" --auto    # diagnose-fix-reverify loop until the command passes
 ```
@@ -159,6 +166,8 @@ the newly selected model.
 /resume <id>            resume a saved session
 /skills                 list available skills (.ucode/skills/*.md)
 /agents                 list available subagent types
+/theme [name]           show or switch color theme
+/plugins                list installed plugins
 /jobs                   list background processes started via run_command
 /loop <interval> <prompt>   re-run a prompt on a timer; Ctrl+C to stop
 /heartbeat [interval]       re-run .ucode/HEARTBEAT.md on a timer (default 30m); Ctrl+C to stop
@@ -227,6 +236,64 @@ tool call (stderr/stdout becomes the denial reason shown to the model); `PostToo
 `examples/settings-with-hooks.json` for a fuller example (blocking `rm -rf`, logging edited
 files).
 
+## Themes
+
+Color themes restyle every `color()`-wrapped string the CLI/REPL prints (banners, tool output,
+prompts). Five are built in:
+
+- `default` — classic 16-color ANSI palette (ucode's original look).
+- `dracula` — purples and pinks on dark backgrounds.
+- `solarized-dark` — low-contrast, eye-friendly palette.
+- `nord` — cool, muted arctic-inspired blues.
+- `monochrome` — no color at all, bold/dim only; for unsupported terminals or accessibility.
+
+Switch with `--theme <name>` at launch, `UCODE_THEME=<name>`, a `"theme"` field in
+`.ucode/settings.json`/`~/.ucode/config.json`, or `/theme <name>` mid-REPL. List everything
+available (built-in, plugin-provided, and your own custom ones) with `ucode themes` or
+`/theme` with no argument.
+
+Anyone can add their own by dropping a JSON file in `.ucode/themes/*.json` (project) or
+`~/.ucode/themes/*.json` (global, applies across projects):
+
+```json
+{
+  "name": "midnight",
+  "description": "Deep blues and a single warm accent.",
+  "colors": { "red": "#e06c75", "green": "#98c379", "blue": "#61afef" }
+}
+```
+
+`colors` keys are `red`/`green`/`yellow`/`blue`/`magenta`/`cyan`/`gray`; each value is either a
+classic ANSI SGR code (number) or a `#rrggbb` hex string (rendered as 24-bit truecolor). Omit any
+slot you don't want to override — it falls back to the `default` theme's value; use `null` to
+disable color for that slot entirely. A custom theme file named after (or with a `name` field
+matching) a built-in overrides it. See `examples/theme-custom.json.example`.
+
+## Plugins
+
+A plugin bundles skills, subagents, themes, and hooks into one shareable directory, using the
+exact same file conventions as their standalone forms — so anything you already know about
+`.ucode/skills/*.md`, `.ucode/agents/*.md`, `.ucode/themes/*.json`, and hooks applies unchanged:
+
+```
+.ucode/plugins/<name>/
+  plugin.json      { "name": "...", "description": "...", "version": "..." }  (optional)
+  skills/*.md       same shape as .ucode/skills/*.md
+  agents/*.md       same shape as .ucode/agents/*.md
+  themes/*.json     same shape as .ucode/themes/*.json
+  hooks.json        { "PreToolUse": [...], "PostToolUse": [...], "SessionStart": [...] }
+```
+
+Drop a plugin directory under project-local `.ucode/plugins/<name>/` or global
+`~/.ucode/plugins/<name>/` and everything it provides loads automatically — no install step, no
+code changes. `plugin.json` is optional; without one the directory name is used. List installed
+plugins and what each one provides with `ucode plugins` or `/plugins`.
+
+On a name collision, project-level skills/agents/themes win over a plugin's; among themes, the
+full precedence is project custom > global custom > plugin > built-in. See
+`examples/plugins/example-plugin/` for a working example (a `changelog` skill and a `gruvbox`
+theme).
+
 ## Continuous loop & auto-fix
 
 ```bash
@@ -290,10 +357,14 @@ src/agent/
 src/tools/             individual tool implementations (read/write/edit/glob/grep/bash/...)
 src/skills/            skill loading (.ucode/skills/*.md) + templating
 src/hooks/             PreToolUse/PostToolUse/SessionStart hook execution
+src/plugins/           plugin loading (.ucode/plugins/<name>/, bundles skills/agents/themes/hooks)
+src/util/              resourceFiles.js: shared frontmatter/JSON parsing used by skills/agents/
+                       themes/plugins
 src/automation/        loop.js (continuous re-run), heartbeat.js (HEARTBEAT.md sourcing),
                        autoFix.js (diagnose-fix-reverify)
 src/memory/            project/global memory file loading
-src/ui/                REPL, one-shot mode, terminal rendering
+src/ui/                REPL, one-shot mode, terminal rendering, themes.js (built-in + custom
+                       theme resolution and ANSI compilation)
 test/                  node:test suite (node --test test/*.test.js)
 ```
 
