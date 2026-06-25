@@ -36,6 +36,7 @@ Flags:
   --auto                 shortcut for --permission-mode bypassPermissions
   --plan                 shortcut for --permission-mode plan
   --theme <name>         color theme (default, dracula, solarized-dark, nord, monochrome, or custom), default: default
+  --image <path>         attach an image to the prompt (repeatable); needs a vision-capable model
   -c, --continue         resume the most recent session in this project
   --resume <id>          resume a specific session id
   -p, --print            one-shot mode: print only the final answer
@@ -78,6 +79,7 @@ function parseArgs(argv) {
       case "--no-calibrate": flags.noCalibrate = true; break;
       case "--recalibrate": flags.recalibrate = true; break;
       case "--theme": flags.theme = argv[++i]; break;
+      case "--image": (flags.images ||= []).push(argv[++i]); break;
       case "--init": flags.init = true; break;
       case "-h": case "--help": flags.help = true; break;
       default: positional.push(a);

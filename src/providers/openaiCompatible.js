@@ -24,6 +24,15 @@ export class OpenAICompatibleProvider extends Provider {
         });
         continue;
       }
+      if (m.images?.length) {
+        const parts = [];
+        if (m.content) parts.push({ type: "text", text: m.content });
+        for (const img of m.images) {
+          parts.push({ type: "image_url", image_url: { url: `data:${img.mediaType};base64,${img.data}` } });
+        }
+        wire.push({ role: m.role, content: parts });
+        continue;
+      }
       wire.push({ role: m.role, content: m.content ?? "" });
     }
     return wire;

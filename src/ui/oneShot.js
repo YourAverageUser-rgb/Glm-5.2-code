@@ -2,6 +2,7 @@ import { runAgentLoop } from "../agent/loop.js";
 import { Session } from "../agent/session.js";
 import { color, nonInteractiveUi } from "./render.js";
 import { buildRuntime } from "../agent/runtime.js";
+import { loadImage } from "../util/images.js";
 
 export async function runOneShot({ prompt, flags = {} }) {
   const confirm = async (tool) => {
@@ -22,13 +23,28 @@ export async function runOneShot({ prompt, flags = {} }) {
   const { config, provider, tools, memory, permissionGate, providerLabel, cwd } = runtime;
   const session = new Session(config);
 
+  let images;
+  if (flags.images?.length) {
+    images = [];
+    for (const p of flags.images) {
+      try {
+        const img = loadImage(p, cwd);
+        images.push({ data: img.data, mediaType: img.mediaType });
+      } catch (err) {
+        console.error(color(`✗ ${err.message}`, "red"));
+        process.exitCode = 1;
+        return;
+      }
+    }
+  }
+
   const ui = nonInteractiveUi({ quiet: flags.quiet });
 
   const result = await runAgentLoop({
     config,
     provider,
     tools,
-    initialMessages: [{ role: "user", content: prompt }],
+    initialMessages: [{ role: "user", content: prompt, images: images?.length ? images : undefined }],
     cwd,
     permissionGate,
     ui,

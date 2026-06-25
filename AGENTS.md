@@ -62,8 +62,10 @@ test/                  node:test suite (one *.test.js file per module, same base
   `reasoning` is assistant-only, display-only (DeepSeek-R1/GLM `reasoning_content`, Anthropic
   `thinking` blocks) — it's surfaced once via a `"thinking"` UI event in `loop.js` and never fed
   back into `toWireMessages()`, so adding it doesn't touch wire serialization or multi-turn
-  replay. Every `Provider.chat()` implementation must translate to/from this shape, not leak wire
-  format upward.
+  replay. User messages may also carry `images?: [{ data /* base64 */, mediaType }]` (loaded via
+  `src/util/images.js`); each provider's `toWireMessages()` turns these into its own multimodal
+  shape (OpenAI `image_url` data URLs, Anthropic base64 `image` blocks). Every `Provider.chat()`
+  implementation must translate to/from this shape, not leak wire format upward.
 - **Tool shape**: `{ name, description, parameters /* JSON Schema */, riskLevel: "read" |
   "write" | "exec" | "interactive", execute(args, ctx) }`. `riskLevel` drives permission
   decisions in `src/agent/permissions.js` — pick the correct one, don't default to "read".

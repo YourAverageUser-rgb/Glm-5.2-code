@@ -23,6 +23,9 @@ models via Ollama/LM Studio, or any other OpenAI-compatible or Anthropic-compati
   allow/deny lists.
 - **Live feedback** — a spinner with elapsed time while waiting on the model, and the model's
   reasoning/"thinking" content (when the provider returns it) rendered before the final answer.
+- **Image input** — attach a photo, screenshot, sketch, or whiteboard of plans with `/image`
+  (REPL) or `--image` (one-shot) and have a vision-capable model recreate or build from it
+  instead of describing everything in text.
 - **Persistent memory** — project memory files (`UCODE.md` / `AGENTS.md` / `CLAUDE.md`) and a
   global `~/.ucode/MEMORY.md`, loaded into every session and updatable via `remember`.
 - **Sessions** — every conversation is saved to disk and resumable; long conversations are
@@ -169,6 +172,7 @@ Shift+Tab             cycle permission mode (best-effort; depends on terminal su
 /plan                 shortcut for mode plan (read-only planning)
 /model [name]          show or change the model name
 /provider [name]       show or switch provider preset
+/image <path>          attach a picture/sketch/plans to your next message (png, jpg, gif, webp)
 /memory                show loaded project/global memory
 /remember <text>       append a fact to project memory
 /sessions               list saved sessions in this project
@@ -183,6 +187,27 @@ Shift+Tab             cycle permission mode (best-effort; depends on terminal su
 /clear                  start a fresh session
 /exit, /quit            leave
 ```
+
+## Image input
+
+When you'd rather show than type — a screenshot of a UI to clone, a photo of a hand-drawn
+wireframe, a diagram of a build, a whiteboard of architecture notes — attach the image instead:
+
+```bash
+# Interactive REPL: stage one or more images, then type your request normally.
+[default] > /image ./mockups/dashboard.png
+📎 Attached dashboard.png (image/png, 412 KB). It'll be sent with your next message.
+[default] 📎1 > recreate this layout as a React component
+
+# One-shot: --image is repeatable.
+ucode --image sketch.jpg --image notes.png "build the data model these sketch out"
+```
+
+Supported formats: PNG, JPEG, GIF, WebP. This requires a **vision-capable model** — e.g. a GLM
+vision model, GPT-4.1, Claude, or any other multimodal endpoint. Text-only models will reject the
+request at the API level (surfaced as a provider error). Images are carried on the user message
+and translated to each provider's native multimodal format (OpenAI `image_url` data URLs,
+Anthropic base64 `image` blocks), so they work across providers without any per-model code.
 
 ## Skills
 

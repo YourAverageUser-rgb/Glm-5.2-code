@@ -24,6 +24,15 @@ export class AnthropicProvider extends Provider {
         wire.push({ role: "assistant", content });
         continue;
       }
+      if (m.images?.length) {
+        const parts = [];
+        if (m.content) parts.push({ type: "text", text: m.content });
+        for (const img of m.images) {
+          parts.push({ type: "image", source: { type: "base64", media_type: img.mediaType, data: img.data } });
+        }
+        wire.push({ role: m.role, content: parts });
+        continue;
+      }
       wire.push({ role: m.role, content: m.content ?? "" });
     }
     return wire;

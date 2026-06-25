@@ -13,6 +13,8 @@ import { startLoopRunner, parseInterval } from "../automation/loop.js";
 import { readHeartbeat } from "../automation/heartbeat.js";
 import { ensureCalibrated } from "../agent/calibrate.js";
 import { resolveThemes } from "./themes.js";
+import { loadImage } from "../util/images.js";
+import path from "node:path";
 
 const HELP = `Commands:
   Shift+Tab             cycle permission mode (best-effort; depends on terminal support)
@@ -22,6 +24,7 @@ const HELP = `Commands:
   /plan                 shortcut for mode plan (read-only planning)
   /model [name]         show or change the model name
   /provider [name]      show or switch provider preset (${listPresets().map((p) => p.name).join(", ")})
+  /image <path>         attach a picture/sketch/plans to your next message (png, jpg, gif, webp)
   /memory               show loaded project/global memory
   /remember <text>      append a fact to project memory
   /sessions             list saved sessions in this project
@@ -86,6 +89,11 @@ export async function startRepl({ flags = {} } = {}) {
     },
   };
 
+  // Images staged with /image are attached to the next message the user sends,
+  // then cleared. This lets them attach one or more pictures and then type their
+  // request normally.
+  const pendingImages = [];
+
   // Shift+Tab is a best-effort convenience: createInterface() already enables
   // keypress decoding on TTY stdin for its own arrow-key/history handling, so we
   // just add a second listener rather than re-deriving that setup ourselves.
@@ -96,13 +104,13 @@ export async function startRepl({ flags = {} } = {}) {
     const next = nextMode(config.permissionMode);
     config.permissionMode = next;
     permissionGate.setMode(next);
-    rl.setPrompt(promptFor(config));
+    rl.setPrompt(promptFor(config, pendingImages));
     rl.prompt(true);
   };
   if (stdin.isTTY) rl.input.on("keypress", onKeypress);
 
   while (true) {
-    rl.setPrompt(promptFor(config));
+    rl.setPrompt(promptFor(config, pendingImages));
     rl.prompt();
     const input = await new Promise((resolve) => rl.once("line", resolve));
     const trimmed = input.trim();
@@ -115,6 +123,8 @@ export async function startRepl({ flags = {} } = {}) {
         memory,
         session,
         rl,
+        cwd,
+        pendingImages,
         skills,
         subagentTypes,
         plugins,
@@ -125,6 +135,7 @@ export async function startRepl({ flags = {} } = {}) {
       if (outcome === "clear") {
         session = new Session(config);
         messages = [];
+        pendingImages.length = 0;
       }
       if (outcome?.newProvider) {
         provider = outcome.newProvider;
@@ -133,7 +144,9 @@ export async function startRepl({ flags = {} } = {}) {
       continue;
     }
 
-    messages.push({ role: "user", content: trimmed });
+    const images = pendingImages.length ? pendingImages.slice() : undefined;
+    pendingImages.length = 0;
+    messages.push({ role: "user", content: trimmed, images });
     const result = await runAgentLoop({
       config,
       provider,
@@ -154,11 +167,12 @@ export async function startRepl({ flags = {} } = {}) {
   rl.close();
 }
 
-function promptFor(config) {
-  return color(`\n[${config.permissionMode}] > `, "bold");
+function promptFor(config, pendingImages = []) {
+  const attachment = pendingImages.length ? color(` 📎${pendingImages.length}`, "cyan") : "";
+  return color(`\n[${config.permissionMode}]`, "bold") + attachment + color(" > ", "bold");
 }
 
-async function handleSlashCommand(line, { config, permissionGate, memory, session, rl, skills, subagentTypes, plugins, runtime, ui }) {
+async function handleSlashCommand(line, { config, permissionGate, memory, session, rl, cwd, pendingImages, skills, subagentTypes, plugins, runtime, ui }) {
   const [cmd, ...rest] = line.slice(1).split(/\s+/);
   const arg = rest.join(" ");
 
@@ -172,6 +186,32 @@ async function handleSlashCommand(line, { config, permissionGate, memory, sessio
     case "clear":
       console.log(color("Started a new session.", "gray"));
       return "clear";
+    case "image":
+    case "img": {
+      if (!arg) {
+        if (pendingImages?.length) {
+          console.log(color(`${pendingImages.length} image(s) staged for your next message.`, "gray"));
+        } else {
+          console.log("Usage: /image <path> — attach a picture/sketch to your next message (png, jpg, gif, webp).");
+        }
+        return;
+      }
+      if (arg === "clear") {
+        if (pendingImages) pendingImages.length = 0;
+        console.log(color("Cleared staged images.", "gray"));
+        return;
+      }
+      try {
+        const img = loadImage(arg, cwd);
+        pendingImages.push({ data: img.data, mediaType: img.mediaType });
+        console.log(
+          color(`📎 Attached ${path.basename(img.path)} (${img.mediaType}, ${(img.bytes / 1024).toFixed(0)} KB). It'll be sent with your next message.`, "green")
+        );
+      } catch (err) {
+        console.log(color(err.message, "red"));
+      }
+      return;
+    }
     case "mode":
       if (!arg || !MODES.includes(arg)) {
         console.log(`Usage: /mode <${MODES.join("|")}>`);
